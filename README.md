@@ -1,6 +1,6 @@
-# 🐇 BunnyCam
+# 🐇 PetCam
 
-A local petcam app for watching your rabbits via your computer's webcam. Live feed, motion detection, and recording — all running locally on your machine.
+A local petcam app for watching your pets/rabbits via your computer's webcam. Live feed, motion detection, and recording — all running locally on your machine.
 
 ## Tech Stack
 
@@ -76,12 +76,10 @@ bunnycam/
 
 ## Stretch Goals / Ideas
 
-- [ ] Night mode (CSS brightness/contrast filters)
+- [ ] Improved night mode
 - [ ] Timelapse: capture a frame every N seconds and stitch into a video
-- [ ] Activity heatmap overlay showing where bunnies move most
-- [ ] Email/SMS alert on motion (integrate with Resend or Twilio)
-- [ ] Auto-record on motion detection
-- [ ] Mobile access via local network (`0.0.0.0` binding + QR code)
+- [ ] SMS alert on motion (integrate with Resend or Twilio)
+- [ ] Train machine learning to differentiate binkies (excited jumping), yawns, and normal movements
 
 ---
 
