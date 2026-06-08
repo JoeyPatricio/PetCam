@@ -1,0 +1,74 @@
+:root {
+  /* Color palette - warm dark with soft hay/meadow accents */
+  --bg-deep:       #0f0d0a;
+  --bg-surface:    #1a1612;
+  --bg-card:       #231e18;
+  --bg-card-hover: #2c2620;
+  --border:        #3a3028;
+  --border-light:  #4a4038;
+
+  --text-primary:  #f0e8d8;
+  --text-secondary:#a89880;
+  --text-muted:    #6a5e50;
+
+  --accent:        #c8a96e;   /* warm hay gold */
+  --accent-soft:   #8a6e3e;
+  --accent-glow:   rgba(200, 169, 110, 0.15);
+
+  --green:         #7ab87a;   /* meadow green */
+  --green-dim:     #3d6e3d;
+  --red:           #c87a6e;
+  --red-dim:       #6e3d3a;
+
+  --motion-color:  rgba(200, 169, 110, 0.6);
+
+  /* Typography */
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-mono:    'DM Mono', 'Courier New', monospace;
+
+  /* Spacing */
+  --radius:    8px;
+  --radius-lg: 16px;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  background-color: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+
+  /* subtle noise grain texture */
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+}
+
+button {
+  font-family: var(--font-mono);
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-surface); }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+
+/* Utility */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0,0,0,0); white-space: nowrap; border-width: 0;
+}

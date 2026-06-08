@@ -1,0 +1,391 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import VideoFeed from './components/VideoFeed.jsx'
+import Controls from './components/Controls.jsx'
+import ActivityLog from './components/ActivityLog.jsx'
+import RecordingGallery from './components/RecordingGallery.jsx'
+import LabelingStudio from './components/LabelingStudio.jsx'
+import { useWebcam } from './hooks/useWebcam.js'
+import { useMotion } from './hooks/useMotion.js'
+
+export default function App() {
+  const [tab, setTab]                     = useState('camera') // 'camera' | 'label'
+  const [events, setEvents]               = useState([])
+  const [sensitivity, setSensitivity]     = useState(30)
+  const [recordingTick, setRecordingTick] = useState(0)
+  const [autoRecordEnabled, setAutoRecordEnabled] = useState(false)
+  const [isRecording, setIsRecording]     = useState(false)
+  const eventIdRef = useRef(0)
+  const recorderRef = useRef(null)
+  const chunksRef = useRef([])
+  const recordTimeoutRef = useRef(null)
+
+  // ── Webcam ──────────────────────────────────────────────
+  const {
+    videoRef, isActive, error,
+    devices, selectedDevice,
+    startCamera, stopCamera, switchCamera,
+  } = useWebcam()
+
+  const getSupportedMimeType = useCallback(() => {
+    if (typeof window === 'undefined' || !window.MediaRecorder) return ''
+    const candidateTypes = [
+      'video/webm; codecs=vp9',
+      'video/webm; codecs=vp8',
+      'video/webm',
+    ]
+    return candidateTypes.find(type => MediaRecorder.isTypeSupported(type)) || ''
+  }, [])
+
+  const uploadRecording = useCallback(async () => {
+    if (chunksRef.current.length === 0) return
+
+    const mimeType = getSupportedMimeType() || 'video/webm'
+    const blob = new Blob(chunksRef.current, { type: mimeType })
+    const formData = new FormData()
+    formData.append('video', blob, `recording-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`)
+
+    try {
+      await fetch('/api/recordings', { method: 'POST', body: formData })
+      setRecordingTick(t => t + 1)
+    } catch (err) {
+      console.error('Recording upload failed:', err)
+    } finally {
+      chunksRef.current = []
+    }
+  }, [getSupportedMimeType])
+
+  const stopRecording = useCallback(() => {
+    if (recordTimeoutRef.current) {
+      window.clearTimeout(recordTimeoutRef.current)
+      recordTimeoutRef.current = null
+    }
+
+    const recorder = recorderRef.current
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop()
+    }
+  }, [])
+
+  const scheduleRecordingStop = useCallback(() => {
+    if (recordTimeoutRef.current) {
+      window.clearTimeout(recordTimeoutRef.current)
+    }
+
+    recordTimeoutRef.current = window.setTimeout(() => {
+      stopRecording()
+    }, 10000)
+  }, [stopRecording])
+
+  const startRecording = useCallback(() => {
+    const video = videoRef.current
+    if (!video || !video.srcObject || !window.MediaRecorder) return
+
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+      scheduleRecordingStop()
+      return
+    }
+
+    const mimeType = getSupportedMimeType()
+    const options = mimeType ? { mimeType } : undefined
+    const recorder = new MediaRecorder(video.srcObject, options)
+
+    chunksRef.current = []
+    recorderRef.current = recorder
+
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        chunksRef.current.push(event.data)
+      }
+    }
+
+    recorder.onstop = () => {
+      setIsRecording(false)
+      recorderRef.current = null
+      uploadRecording()
+    }
+
+    recorder.start()
+    setIsRecording(true)
+    scheduleRecordingStop()
+  }, [getSupportedMimeType, scheduleRecordingStop, uploadRecording, videoRef])
+
+  const handleManualRecord = useCallback(() => {
+    if (!isRecording) {
+      startRecording()
+    }
+  }, [isRecording, startRecording])
+
+  const handleToggleAutoRecord = useCallback(() => {
+    setAutoRecordEnabled(prev => !prev)
+  }, [])
+
+  const handleMotion = useCallback(({ level, timestamp }) => {
+    const id = ++eventIdRef.current
+    setEvents(prev => [
+      ...prev.slice(-199), // keep last 200 events
+      {
+        id,
+        timestamp,
+        message: 'Bunnies moving!',
+        level,
+      }
+    ])
+
+    if (Notification.permission === 'granted') {
+      new Notification('BunnyCam 🐇', { body: 'Motion detected!', silent: true })
+    }
+
+    if (autoRecordEnabled) {
+      if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+        scheduleRecordingStop()
+      } else {
+        startRecording()
+      }
+    }
+  }, [autoRecordEnabled, scheduleRecordingStop, startRecording])
+
+  const {
+    motionLevel, isMotion,
+    motionEnabled, toggleMotion,
+    overlayCanvasRef,
+    nightVisionActive, nightVisionForced,
+    nightVisionCanvasRef, toggleNightVision,
+  } = useMotion({ videoRef, isActive, sensitivity, onMotion: handleMotion })
+
+  // ── Notification permission ───────────────────────────────
+  const requestNotifications = useCallback(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }, [])
+
+  const handleStart = useCallback(() => {
+    requestNotifications()
+    startCamera()
+  }, [startCamera, requestNotifications])
+
+  useEffect(() => {
+    return () => {
+      if (recordTimeoutRef.current) {
+        window.clearTimeout(recordTimeoutRef.current)
+      }
+
+      const recorder = recorderRef.current
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.stop()
+      }
+    }
+  }, [])
+
+  return (
+    <div className="app">
+      {/* Header */}
+      <header className="app-header">
+        <div className="header-logo">
+          <span className="logo-emoji">🐇</span>
+          <span className="logo-text">BunnyCam</span>
+        </div>
+
+        <nav className="header-tabs">
+          <button
+            className={`header-tab ${tab === 'camera' ? 'tab-active' : ''}`}
+            onClick={() => setTab('camera')}
+          >
+            Camera
+          </button>
+          <button
+            className={`header-tab ${tab === 'label' ? 'tab-active' : ''}`}
+            onClick={() => setTab('label')}
+          >
+            Label Studio
+          </button>
+        </nav>
+
+        <div className="header-status">
+          {isActive ? (
+            <span className="status-active">● watching</span>
+          ) : (
+            <span className="status-idle">○ idle</span>
+          )}
+        </div>
+      </header>
+
+      {tab === 'label' && <LabelingStudio />}
+
+      {/* Main layout — only mounted when on camera tab */}
+      <main className="app-main" style={{ display: tab === 'camera' ? 'grid' : 'none' }}>
+        {/* Left col: video + controls */}
+        <section className="col-main">
+          <VideoFeed
+            videoRef={videoRef}
+            overlayCanvasRef={overlayCanvasRef}
+            nightVisionCanvasRef={nightVisionCanvasRef}
+            nightVisionActive={nightVisionActive}
+            isActive={isActive}
+            isMotion={isMotion}
+            error={error}
+          />
+
+          <div className="controls-card">
+            <Controls
+              isActive={isActive}
+              motionEnabled={motionEnabled}
+              isRecording={isRecording}
+              autoRecordEnabled={autoRecordEnabled}
+              motionLevel={motionLevel}
+              sensitivity={sensitivity}
+              devices={devices}
+              selectedDevice={selectedDevice}
+              onStart={handleStart}
+              onStop={stopCamera}
+              onRecord={handleManualRecord}
+              onToggleAutoRecord={handleToggleAutoRecord}
+              onToggleMotion={toggleMotion}
+              onSensitivityChange={setSensitivity}
+              onSwitchCamera={switchCamera}
+              nightVisionActive={nightVisionActive}
+              nightVisionForced={nightVisionForced}
+              onToggleNightVision={toggleNightVision}
+            />
+          </div>
+        </section>
+
+        {/* Right col: log + galleries */}
+        <aside className="col-side">
+          <ActivityLog
+            events={events}
+            onClear={() => setEvents([])}
+          />
+          <RecordingGallery refreshTrigger={recordingTick} />
+        </aside>
+      </main>
+
+      <style>{`
+        .app {
+          display: flex;
+          flex-direction: column;
+          min-height: 100vh;
+          padding: 0 0 32px;
+        }
+
+        /* Header */
+        .app-header {
+          display: flex;
+          align-items: center;
+          gap: 20px;
+          padding: 0 28px;
+          border-bottom: 1px solid var(--border);
+          background: var(--bg-surface);
+          height: 52px;
+        }
+
+        .header-logo {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-shrink: 0;
+        }
+
+        .header-tabs {
+          display: flex;
+          align-items: stretch;
+          gap: 0;
+          height: 100%;
+          margin-left: 8px;
+        }
+
+        .header-tab {
+          height: 100%;
+          padding: 0 18px;
+          font-size: 12px;
+          font-family: var(--font-mono);
+          letter-spacing: 0.06em;
+          color: var(--text-muted);
+          background: transparent;
+          border: none;
+          border-bottom: 2px solid transparent;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+
+        .header-tab:hover { color: var(--text-secondary); }
+
+        .tab-active {
+          color: var(--text-primary) !important;
+          border-bottom-color: var(--accent) !important;
+        }
+
+        .header-status { margin-left: auto; }
+
+        .logo-emoji { font-size: 22px; }
+
+        .logo-text {
+          font-family: var(--font-display);
+          font-size: 22px;
+          font-weight: 600;
+          color: var(--text-primary);
+          letter-spacing: 0.02em;
+        }
+
+        .status-active {
+          color: var(--green);
+          font-size: 11px;
+          letter-spacing: 0.08em;
+        }
+
+        .status-idle {
+          color: var(--text-muted);
+          font-size: 11px;
+          letter-spacing: 0.08em;
+        }
+
+        /* Layout */
+        .app-main {
+          display: grid;
+          grid-template-columns: 1fr 320px;
+          gap: 20px;
+          padding: 20px 28px 0;
+          flex: 1;
+          align-items: start;
+        }
+
+        .col-main {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .controls-card {
+          background: var(--bg-card);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-lg);
+          padding: 16px;
+        }
+
+        .col-side {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          position: sticky;
+          top: 20px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+          .app-main {
+            grid-template-columns: 1fr;
+            padding: 16px 16px 0;
+          }
+
+          .col-side {
+            position: static;
+          }
+
+          .app-header {
+            padding: 0 16px;
+          }
+        }
+      `}</style>
+    </div>
+  )
+}

@@ -1,0 +1,9 @@
+node_modules/
+client/node_modules/
+server/node_modules/
+client/dist/
+server/activity-log.json
+server/labels.json
+server/recordings/
+server/tmp/
+.env
