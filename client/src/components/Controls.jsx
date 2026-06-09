@@ -13,8 +13,6 @@ export default function Controls({
   sensitivity,
   devices,
   selectedDevice,
-  nightVisionActive,
-  nightVisionForced,
   onStart,
   onStop,
   onRecord,
@@ -22,7 +20,6 @@ export default function Controls({
   onToggleMotion,
   onSensitivityChange,
   onSwitchCamera,
-  onToggleNightVision,
 }) {
   const [recording, setRecording] = useState(false)
 
@@ -70,20 +67,6 @@ export default function Controls({
           {motionEnabled ? '👁 Motion On' : '👁 Motion Off'}
         </button>
 
-        <button
-          className={`btn btn-secondary ${nightVisionForced ? 'btn-nv-on' : ''} ${nightVisionActive && !nightVisionForced ? 'btn-nv-auto' : ''}`}
-          onClick={onToggleNightVision}
-          disabled={!isActive}
-          title={
-            nightVisionForced
-              ? 'Night vision forced on — click to set back to auto'
-              : nightVisionActive
-                ? 'Night vision auto-active (scene is dark)'
-                : 'Force night vision on'
-          }
-        >
-          {nightVisionForced ? '🌙 NV On' : nightVisionActive ? '🌙 NV Auto' : '🌙 NV Off'}
-        </button>
       </div>
 
       {/* Motion level bar */}
@@ -202,16 +185,6 @@ export default function Controls({
           color: var(--accent);
         }
 
-        .btn-nv-on {
-          border-color: rgba(125, 255, 125, 0.4);
-          color: #7dff7d;
-          background: rgba(125, 255, 125, 0.08);
-        }
-
-        .btn-nv-auto {
-          border-color: rgba(125, 255, 125, 0.2);
-          color: rgba(125, 255, 125, 0.7);
-        }
 
         /* Motion bar */
         .motion-bar-row {

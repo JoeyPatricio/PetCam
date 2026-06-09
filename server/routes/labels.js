@@ -39,8 +39,8 @@ router.post('/:filename', async (req, res) => {
   if (!filename.startsWith('recording-') || !filename.endsWith('.webm')) {
     return res.status(400).json({ error: 'Invalid filename' })
   }
-  if (!['binky', 'yawn', 'normal'].includes(label)) {
-    return res.status(400).json({ error: 'Label must be "binky", "yawn", or "normal"' })
+  if (!['binky', 'yawn', 'normal', 'grooming', 'standing'].includes(label)) {
+    return res.status(400).json({ error: 'Label must be "binky", "yawn", "normal", "grooming", or "standing"' })
   }
 
   try {

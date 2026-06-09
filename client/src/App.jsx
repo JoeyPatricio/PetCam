@@ -148,8 +148,6 @@ export default function App() {
     motionLevel, isMotion,
     motionEnabled, toggleMotion,
     overlayCanvasRef,
-    nightVisionActive, nightVisionForced,
-    nightVisionCanvasRef, toggleNightVision,
   } = useMotion({ videoRef, isActive, sensitivity, onMotion: handleMotion })
 
   // ── Notification permission ───────────────────────────────
@@ -219,8 +217,6 @@ export default function App() {
           <VideoFeed
             videoRef={videoRef}
             overlayCanvasRef={overlayCanvasRef}
-            nightVisionCanvasRef={nightVisionCanvasRef}
-            nightVisionActive={nightVisionActive}
             isActive={isActive}
             isMotion={isMotion}
             error={error}
@@ -243,9 +239,6 @@ export default function App() {
               onToggleMotion={toggleMotion}
               onSensitivityChange={setSensitivity}
               onSwitchCamera={switchCamera}
-              nightVisionActive={nightVisionActive}
-              nightVisionForced={nightVisionForced}
-              onToggleNightVision={toggleNightVision}
             />
           </div>
         </section>

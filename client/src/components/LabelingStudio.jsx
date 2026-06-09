@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 
-const LABEL_BINKY  = 'binky'
-const LABEL_YAWN   = 'yawn'
-const LABEL_NORMAL = 'normal'
+const LABEL_BINKY    = 'binky'
+const LABEL_YAWN     = 'yawn'
+const LABEL_NORMAL   = 'normal'
+const LABEL_GROOMING = 'grooming'
+const LABEL_STANDING = 'standing'
 const ACCEPTED_EXTENSIONS = '.mp4,.mov,.avi,.mkv,.webm,.m4v'
 
 // ── Import Panel ────────────────────────────────────────────────────────────
@@ -167,7 +169,7 @@ export default function LabelingStudio() {
   const [recordings, setRecordings] = useState([])  // [{ filename, createdAt, size }]
   const [labels, setLabels]         = useState({})   // { filename: 'binky'|'normal' }
   const [index, setIndex]           = useState(0)
-  const [filter, setFilter]         = useState('all') // 'all' | 'unlabeled' | 'binky' | 'normal'
+  const [filter, setFilter]         = useState('all') // 'all' | 'unlabeled' | 'binky' | 'yawn' | 'normal' | 'grooming'
   const [saving, setSaving]         = useState(false)
   const [loading, setLoading]       = useState(true)
   const videoRef = useRef(null)
@@ -215,6 +217,8 @@ export default function LabelingStudio() {
     if (filter === 'binky')     return labels[r.filename] === LABEL_BINKY
     if (filter === 'yawn')      return labels[r.filename] === LABEL_YAWN
     if (filter === 'normal')    return labels[r.filename] === LABEL_NORMAL
+    if (filter === 'grooming')  return labels[r.filename] === LABEL_GROOMING
+    if (filter === 'standing')  return labels[r.filename] === LABEL_STANDING
     return true
   })
 
@@ -272,6 +276,8 @@ export default function LabelingStudio() {
       if (e.key === 'b' || e.key === 'B') applyLabel(LABEL_BINKY)
       if (e.key === 'y' || e.key === 'Y') applyLabel(LABEL_YAWN)
       if (e.key === 'n' || e.key === 'N') applyLabel(LABEL_NORMAL)
+      if (e.key === 'g' || e.key === 'G') applyLabel(LABEL_GROOMING)
+      if (e.key === 's' || e.key === 'S') applyLabel(LABEL_STANDING)
       if (e.key === 'ArrowRight' || e.key === 'd')
         setIndex(prev => Math.min(prev + 1, filtered.length - 1))
       if (e.key === 'ArrowLeft' || e.key === 'a')
@@ -294,11 +300,13 @@ export default function LabelingStudio() {
   }
 
   // ── Stats ─────────────────────────────────────────────────────────────────
-  const totalCount   = recordings.length
-  const binkyCount   = Object.values(labels).filter(l => l === LABEL_BINKY).length
-  const yawnCount    = Object.values(labels).filter(l => l === LABEL_YAWN).length
-  const normalCount  = Object.values(labels).filter(l => l === LABEL_NORMAL).length
-  const labeledCount = binkyCount + yawnCount + normalCount
+  const totalCount    = recordings.length
+  const binkyCount    = Object.values(labels).filter(l => l === LABEL_BINKY).length
+  const yawnCount     = Object.values(labels).filter(l => l === LABEL_YAWN).length
+  const normalCount   = Object.values(labels).filter(l => l === LABEL_NORMAL).length
+  const groomingCount = Object.values(labels).filter(l => l === LABEL_GROOMING).length
+  const standingCount = Object.values(labels).filter(l => l === LABEL_STANDING).length
+  const labeledCount  = binkyCount + yawnCount + normalCount + groomingCount + standingCount
   const pctDone      = totalCount > 0 ? Math.round((labeledCount / totalCount) * 100) : 0
 
   if (loading) {
@@ -342,6 +350,8 @@ export default function LabelingStudio() {
           <span className="stat-chip stat-binky">{binkyCount} binky</span>
           <span className="stat-chip stat-yawn">{yawnCount} yawn</span>
           <span className="stat-chip stat-normal">{normalCount} normal</span>
+          <span className="stat-chip stat-grooming">{groomingCount} grooming</span>
+          <span className="stat-chip stat-standing">{standingCount} standing</span>
           <span className="stat-chip stat-unlabeled">{totalCount - labeledCount} unlabeled</span>
         </div>
         <button className="export-btn" onClick={exportLabels} disabled={labeledCount === 0}>
@@ -363,12 +373,20 @@ export default function LabelingStudio() {
           className="progress-normal"
           style={{ width: `${totalCount > 0 ? (normalCount / totalCount) * 100 : 0}%` }}
         />
+        <div
+          className="progress-grooming"
+          style={{ width: `${totalCount > 0 ? (groomingCount / totalCount) * 100 : 0}%` }}
+        />
+        <div
+          className="progress-standing"
+          style={{ width: `${totalCount > 0 ? (standingCount / totalCount) * 100 : 0}%` }}
+        />
       </div>
       <div className="progress-label">{pctDone}% labeled — {labeledCount} / {totalCount} clips</div>
 
       {/* ── Filter tabs ─────────────────────────────────────────────────── */}
       <div className="filter-tabs">
-        {['all', 'unlabeled', 'binky', 'yawn', 'normal'].map(f => (
+        {['all', 'unlabeled', 'binky', 'yawn', 'normal', 'grooming', 'standing'].map(f => (
           <button
             key={f}
             className={`filter-tab ${filter === f ? 'active' : ''}`}
@@ -379,6 +397,8 @@ export default function LabelingStudio() {
             {f === 'binky'     ? `Binky (${binkyCount})`                    : ''}
             {f === 'yawn'      ? `Yawn (${yawnCount})`                      : ''}
             {f === 'normal'    ? `Normal (${normalCount})`                  : ''}
+            {f === 'grooming'  ? `Grooming (${groomingCount})`              : ''}
+            {f === 'standing'  ? `Standing (${standingCount})`              : ''}
           </button>
         ))}
       </div>
@@ -390,7 +410,7 @@ export default function LabelingStudio() {
 
           {/* ── Video player ──────────────────────────────────────────────── */}
           <div className="player-section">
-            <div className={`player-wrap ${currentLabel === LABEL_BINKY ? 'border-binky' : currentLabel === LABEL_YAWN ? 'border-yawn' : currentLabel === LABEL_NORMAL ? 'border-normal' : ''}`}>
+            <div className={`player-wrap ${currentLabel === LABEL_BINKY ? 'border-binky' : currentLabel === LABEL_YAWN ? 'border-yawn' : currentLabel === LABEL_NORMAL ? 'border-normal' : currentLabel === LABEL_GROOMING ? 'border-grooming' : currentLabel === LABEL_STANDING ? 'border-standing' : ''}`}>
               {current && (
                 <video
                   ref={videoRef}
@@ -404,8 +424,8 @@ export default function LabelingStudio() {
                 />
               )}
               {currentLabel && (
-                <div className={`current-label-badge ${currentLabel === LABEL_BINKY ? 'badge-binky' : currentLabel === LABEL_YAWN ? 'badge-yawn' : 'badge-normal'}`}>
-                  {currentLabel === LABEL_BINKY ? '🐇 BINKY' : currentLabel === LABEL_YAWN ? '🥱 YAWN' : '🚶 NORMAL'}
+                <div className={`current-label-badge ${currentLabel === LABEL_BINKY ? 'badge-binky' : currentLabel === LABEL_YAWN ? 'badge-yawn' : currentLabel === LABEL_GROOMING ? 'badge-grooming' : currentLabel === LABEL_STANDING ? 'badge-standing' : 'badge-normal'}`}>
+                  {currentLabel === LABEL_BINKY ? '🐇 BINKY' : currentLabel === LABEL_YAWN ? '🥱 YAWN' : currentLabel === LABEL_GROOMING ? '🐾 GROOMING' : currentLabel === LABEL_STANDING ? '🦘 STANDING' : '🚶 NORMAL'}
                 </div>
               )}
             </div>
@@ -468,6 +488,26 @@ export default function LabelingStudio() {
                 <span className="label-btn-text">Normal</span>
                 <span className="label-btn-key">N</span>
               </button>
+
+              <button
+                className={`label-btn btn-grooming ${currentLabel === LABEL_GROOMING ? 'selected' : ''}`}
+                onClick={() => applyLabel(LABEL_GROOMING)}
+                disabled={saving}
+              >
+                <span className="label-btn-icon">🐾</span>
+                <span className="label-btn-text">Grooming</span>
+                <span className="label-btn-key">G</span>
+              </button>
+
+              <button
+                className={`label-btn btn-standing ${currentLabel === LABEL_STANDING ? 'selected' : ''}`}
+                onClick={() => applyLabel(LABEL_STANDING)}
+                disabled={saving}
+              >
+                <span className="label-btn-icon">🦘</span>
+                <span className="label-btn-text">Standing</span>
+                <span className="label-btn-key">S</span>
+              </button>
             </div>
 
             {currentLabel && (
@@ -477,7 +517,7 @@ export default function LabelingStudio() {
             )}
 
             <div className="shortcut-hint">
-              Arrow keys to navigate · B / Y / N to label · Delete to clear
+              Arrow keys to navigate · B / Y / N / G / S to label · Delete to clear
             </div>
           </div>
 
@@ -488,7 +528,7 @@ export default function LabelingStudio() {
               return (
                 <button
                   key={r.filename}
-                  className={`strip-thumb ${i === index ? 'strip-current' : ''} ${lbl === LABEL_BINKY ? 'strip-binky' : lbl === LABEL_YAWN ? 'strip-yawn' : lbl === LABEL_NORMAL ? 'strip-normal' : 'strip-unlabeled'}`}
+                  className={`strip-thumb ${i === index ? 'strip-current' : ''} ${lbl === LABEL_BINKY ? 'strip-binky' : lbl === LABEL_YAWN ? 'strip-yawn' : lbl === LABEL_NORMAL ? 'strip-normal' : lbl === LABEL_GROOMING ? 'strip-grooming' : lbl === LABEL_STANDING ? 'strip-standing' : 'strip-unlabeled'}`}
                   onClick={() => setIndex(i)}
                   title={`${r.filename} — ${lbl || 'unlabeled'}`}
                 >
@@ -499,8 +539,8 @@ export default function LabelingStudio() {
                     className="strip-video"
                   />
                   {lbl && (
-                    <span className={`strip-badge ${lbl === LABEL_BINKY ? 'strip-badge-binky' : lbl === LABEL_YAWN ? 'strip-badge-yawn' : 'strip-badge-normal'}`}>
-                      {lbl === LABEL_BINKY ? 'B' : lbl === LABEL_YAWN ? 'Y' : 'N'}
+                    <span className={`strip-badge ${lbl === LABEL_BINKY ? 'strip-badge-binky' : lbl === LABEL_YAWN ? 'strip-badge-yawn' : lbl === LABEL_GROOMING ? 'strip-badge-grooming' : lbl === LABEL_STANDING ? 'strip-badge-standing' : 'strip-badge-normal'}`}>
+                      {lbl === LABEL_BINKY ? 'B' : lbl === LABEL_YAWN ? 'Y' : lbl === LABEL_GROOMING ? 'G' : lbl === LABEL_STANDING ? 'S' : 'N'}
                     </span>
                   )}
                 </button>
@@ -549,6 +589,8 @@ export default function LabelingStudio() {
         .stat-binky     { background: rgba(125, 255, 125, 0.1); border-color: rgba(125, 255, 125, 0.3); color: #7dff7d; }
         .stat-yawn      { background: rgba(255, 210, 100, 0.1); border-color: rgba(255, 210, 100, 0.3); color: #ffd264; }
         .stat-normal    { background: rgba(100, 160, 255, 0.1); border-color: rgba(100, 160, 255, 0.3); color: #88aaff; }
+        .stat-grooming  { background: rgba(220, 130, 255, 0.1); border-color: rgba(220, 130, 255, 0.3); color: #dc82ff; }
+        .stat-standing  { background: rgba(255, 160,  60, 0.1); border-color: rgba(255, 160,  60, 0.3); color: #ff9f3c; }
         .stat-unlabeled { background: var(--bg-card); border-color: var(--border); color: var(--text-muted); }
 
         .export-btn {
@@ -578,9 +620,11 @@ export default function LabelingStudio() {
           display: flex;
         }
 
-        .progress-binky  { height: 100%; background: #7dff7d; transition: width 0.3s ease; }
-        .progress-yawn   { height: 100%; background: #ffd264; transition: width 0.3s ease; }
-        .progress-normal { height: 100%; background: #88aaff; transition: width 0.3s ease; }
+        .progress-binky    { height: 100%; background: #7dff7d; transition: width 0.3s ease; }
+        .progress-yawn     { height: 100%; background: #ffd264; transition: width 0.3s ease; }
+        .progress-normal   { height: 100%; background: #88aaff; transition: width 0.3s ease; }
+        .progress-grooming { height: 100%; background: #dc82ff; transition: width 0.3s ease; }
+        .progress-standing { height: 100%; background: #ff9f3c; transition: width 0.3s ease; }
 
         .progress-label {
           font-size: 11px;
@@ -652,9 +696,11 @@ export default function LabelingStudio() {
           transition: border-color 0.2s ease;
         }
 
-        .border-binky  { border-color: rgba(125, 255, 125, 0.6); }
-        .border-yawn   { border-color: rgba(255, 210, 100, 0.6); }
-        .border-normal { border-color: rgba(136, 170, 255, 0.6); }
+        .border-binky    { border-color: rgba(125, 255, 125, 0.6); }
+        .border-yawn     { border-color: rgba(255, 210, 100, 0.6); }
+        .border-normal   { border-color: rgba(136, 170, 255, 0.6); }
+        .border-grooming { border-color: rgba(220, 130, 255, 0.6); }
+        .border-standing { border-color: rgba(255, 160,  60, 0.6); }
 
         .player-video {
           width: 100%;
@@ -675,9 +721,11 @@ export default function LabelingStudio() {
           font-weight: 600;
         }
 
-        .badge-binky  { background: rgba(0, 0, 0, 0.7); color: #7dff7d; border: 1px solid rgba(125,255,125,0.4); }
-        .badge-yawn   { background: rgba(0, 0, 0, 0.7); color: #ffd264; border: 1px solid rgba(255,210,100,0.4); }
-        .badge-normal { background: rgba(0, 0, 0, 0.7); color: #88aaff; border: 1px solid rgba(136,170,255,0.4); }
+        .badge-binky    { background: rgba(0, 0, 0, 0.7); color: #7dff7d; border: 1px solid rgba(125,255,125,0.4); }
+        .badge-yawn     { background: rgba(0, 0, 0, 0.7); color: #ffd264; border: 1px solid rgba(255,210,100,0.4); }
+        .badge-normal   { background: rgba(0, 0, 0, 0.7); color: #88aaff; border: 1px solid rgba(136,170,255,0.4); }
+        .badge-grooming { background: rgba(0, 0, 0, 0.7); color: #dc82ff; border: 1px solid rgba(220,130,255,0.4); }
+        .badge-standing { background: rgba(0, 0, 0, 0.7); color: #ff9f3c; border: 1px solid rgba(255,160, 60,0.4); }
 
         /* Clip meta */
         .clip-meta {
@@ -735,7 +783,7 @@ export default function LabelingStudio() {
         /* Label buttons */
         .label-buttons {
           display: grid;
-          grid-template-columns: 1fr 1fr 1fr;
+          grid-template-columns: 1fr 1fr;
           gap: 10px;
         }
 
@@ -798,6 +846,34 @@ export default function LabelingStudio() {
           border-color: rgba(136, 170, 255, 0.7);
           color: #88aaff;
           box-shadow: 0 0 16px rgba(136, 170, 255, 0.15);
+        }
+
+        .btn-grooming {
+          background: rgba(220, 130, 255, 0.08);
+          border-color: rgba(220, 130, 255, 0.25);
+          color: rgba(220, 130, 255, 0.8);
+        }
+
+        .btn-grooming:hover:not(:disabled),
+        .btn-grooming.selected {
+          background: rgba(220, 130, 255, 0.18);
+          border-color: rgba(220, 130, 255, 0.7);
+          color: #dc82ff;
+          box-shadow: 0 0 16px rgba(220, 130, 255, 0.15);
+        }
+
+        .btn-standing {
+          background: rgba(255, 160, 60, 0.08);
+          border-color: rgba(255, 160, 60, 0.25);
+          color: rgba(255, 160, 60, 0.8);
+        }
+
+        .btn-standing:hover:not(:disabled),
+        .btn-standing.selected {
+          background: rgba(255, 160, 60, 0.18);
+          border-color: rgba(255, 160, 60, 0.7);
+          color: #ff9f3c;
+          box-shadow: 0 0 16px rgba(255, 160, 60, 0.15);
         }
 
         .label-btn-icon { font-size: 20px; }
@@ -865,9 +941,11 @@ export default function LabelingStudio() {
 
         .strip-thumb:hover        { border-color: var(--border-light); }
         .strip-current            { border-color: var(--accent) !important; }
-        .strip-binky:not(.strip-current)  { border-color: rgba(125, 255, 125, 0.35); }
-        .strip-yawn:not(.strip-current)   { border-color: rgba(255, 210, 100, 0.35); }
-        .strip-normal:not(.strip-current) { border-color: rgba(136, 170, 255, 0.35); }
+        .strip-binky:not(.strip-current)    { border-color: rgba(125, 255, 125, 0.35); }
+        .strip-yawn:not(.strip-current)     { border-color: rgba(255, 210, 100, 0.35); }
+        .strip-normal:not(.strip-current)   { border-color: rgba(136, 170, 255, 0.35); }
+        .strip-grooming:not(.strip-current) { border-color: rgba(220, 130, 255, 0.35); }
+        .strip-standing:not(.strip-current) { border-color: rgba(255, 160,  60, 0.35); }
 
         .strip-video {
           width: 100%;
@@ -888,9 +966,11 @@ export default function LabelingStudio() {
           font-family: var(--font-mono);
         }
 
-        .strip-badge-binky  { background: rgba(0,0,0,0.75); color: #7dff7d; }
-        .strip-badge-yawn   { background: rgba(0,0,0,0.75); color: #ffd264; }
-        .strip-badge-normal { background: rgba(0,0,0,0.75); color: #88aaff; }
+        .strip-badge-binky    { background: rgba(0,0,0,0.75); color: #7dff7d; }
+        .strip-badge-yawn     { background: rgba(0,0,0,0.75); color: #ffd264; }
+        .strip-badge-normal   { background: rgba(0,0,0,0.75); color: #88aaff; }
+        .strip-badge-grooming { background: rgba(0,0,0,0.75); color: #dc82ff; }
+        .strip-badge-standing { background: rgba(0,0,0,0.75); color: #ff9f3c; }
 
         /* Import panel */
         .import-panel {
