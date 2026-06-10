@@ -1,15 +1,53 @@
 import React, { useState, useEffect, useCallback } from 'react'
 
+const BASE_COLOR = {
+  grooming: '#dc82ff', normal: '#88aaff', standing: '#ff9f3c',
+  yawn: '#ffd264', zoomies: '#7dff7d',
+}
+
+const labelColor = (lbl) => {
+  if (!lbl) return 'var(--text-muted)'
+  return BASE_COLOR[lbl.replace('ml_', '')] ?? 'var(--text-muted)'
+}
+
+const labelDisplay = (lbl) => {
+  if (!lbl) return 'Unlabeled'
+  if (lbl.startsWith('ml_')) return `ML ${lbl.slice(3).charAt(0).toUpperCase()}${lbl.slice(4)}`
+  return lbl.charAt(0).toUpperCase() + lbl.slice(1)
+}
+
+const FILTER_OPTIONS = [
+  { value: 'all',          label: 'All' },
+  { value: 'ml_zoomies',   label: 'ML Zoomies' },
+  { value: 'ml_yawn',      label: 'ML Yawn' },
+  { value: 'ml_grooming',  label: 'ML Grooming' },
+  { value: 'ml_standing',  label: 'ML Standing' },
+  { value: 'ml_normal',    label: 'ML Normal' },
+  { value: 'zoomies',      label: 'Zoomies' },
+  { value: 'yawn',         label: 'Yawn' },
+  { value: 'grooming',     label: 'Grooming' },
+  { value: 'standing',     label: 'Standing' },
+  { value: 'normal',       label: 'Normal' },
+  { value: 'unlabeled',    label: 'Unlabeled' },
+]
+
 export default function RecordingGallery({ refreshTrigger }) {
   const [recordings, setRecordings] = useState([])
-  const [loading, setLoading] = useState(false)
+  const [labels, setLabels]         = useState({})
+  const [loading, setLoading]       = useState(false)
+  const [filter, setFilter]         = useState('all')
 
-  const fetchRecordings = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/recordings')
-      const data = await res.json()
-      setRecordings(data.recordings || [])
+      const [recRes, lblRes] = await Promise.all([
+        fetch('/api/recordings'),
+        fetch('/api/labels'),
+      ])
+      const { recordings: recs } = await recRes.json()
+      const { labels: lbls }     = await lblRes.json()
+      setRecordings((recs || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)))
+      setLabels(lbls || {})
     } catch (err) {
       console.error('Failed to load recordings:', err)
     } finally {
@@ -17,9 +55,7 @@ export default function RecordingGallery({ refreshTrigger }) {
     }
   }, [])
 
-  useEffect(() => {
-    fetchRecordings()
-  }, [fetchRecordings, refreshTrigger])
+  useEffect(() => { fetchAll() }, [fetchAll, refreshTrigger])
 
   const deleteRecording = async (filename) => {
     try {
@@ -32,17 +68,32 @@ export default function RecordingGallery({ refreshTrigger }) {
 
   const formatDate = (isoStr) => {
     const d = new Date(isoStr)
-    return d.toLocaleString([], {
-      month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit'
-    })
+    return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
+
+  const filtered = recordings.filter(r => {
+    if (filter === 'all') return true
+    const lbl = labels[r.filename] ?? null
+    if (filter === 'unlabeled') return lbl === null
+    return lbl === filter
+  })
 
   return (
     <div className="recordings">
       <div className="recordings-header">
         <span className="recordings-title">Recordings</span>
-        <span className="recordings-count">{recordings.length} saved</span>
+        <div className="recordings-header-right">
+          <select
+            className="filter-select"
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+          >
+            {FILTER_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <span className="recordings-count">{filtered.length} / {recordings.length}</span>
+        </div>
       </div>
 
       {loading && <div className="recordings-loading">Loading…</div>}
@@ -54,33 +105,34 @@ export default function RecordingGallery({ refreshTrigger }) {
         </div>
       )}
 
-      <div className="recordings-grid">
-        {recordings.map(recording => (
-          <div
-            key={recording.filename}
-            className="recording-item"
-          >
-            <div className="recording-thumb">
-              <video
-                controls
-                muted
-                preload="none"
-                src={`/recordings/${recording.filename}`}
-              />
-            </div>
+      {!loading && recordings.length > 0 && filtered.length === 0 && (
+        <div className="recordings-empty">
+          <span>🔍</span>
+          <span>No {filter} clips yet.</span>
+        </div>
+      )}
 
-            <div className="recording-meta">
-              <span className="recording-time">{formatDate(recording.createdAt)}</span>
-              <button
-                className="delete-btn"
-                onClick={() => deleteRecording(recording.filename)}
-                title="Delete recording"
-              >
-                ✕
-              </button>
+      <div className="recordings-grid">
+        {filtered.map(recording => {
+          const lbl = labels[recording.filename] ?? null
+          const color = labelColor(lbl)
+          return (
+            <div key={recording.filename} className="recording-item">
+              <div className="recording-thumb" style={{ borderColor: lbl ? color + '66' : 'var(--border)' }}>
+                <video controls muted preload="none" src={`/recordings/${recording.filename}`} />
+                {lbl && (
+                  <div className="recording-label-badge" style={{ color, borderColor: color + '88' }}>
+                    {labelDisplay(lbl)}
+                  </div>
+                )}
+              </div>
+              <div className="recording-meta">
+                <span className="recording-time">{formatDate(recording.createdAt)}</span>
+                <button className="delete-btn" onClick={() => deleteRecording(recording.filename)} title="Delete">✕</button>
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       <style>{`
@@ -95,9 +147,10 @@ export default function RecordingGallery({ refreshTrigger }) {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 10px 14px;
+          padding: 8px 14px;
           border-bottom: 1px solid var(--border);
           background: var(--bg-surface);
+          gap: 8px;
         }
 
         .recordings-title {
@@ -106,9 +159,28 @@ export default function RecordingGallery({ refreshTrigger }) {
           color: var(--text-secondary);
         }
 
+        .recordings-header-right {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .filter-select {
+          background: var(--bg-card);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          color: var(--text-secondary);
+          font-size: 11px;
+          padding: 3px 6px;
+          cursor: pointer;
+          outline: none;
+        }
+        .filter-select:focus { border-color: var(--accent); }
+
         .recordings-count {
           color: var(--text-muted);
           font-size: 11px;
+          white-space: nowrap;
         }
 
         .recordings-loading,
@@ -128,7 +200,7 @@ export default function RecordingGallery({ refreshTrigger }) {
           grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
           gap: 8px;
           padding: 12px;
-          max-height: 360px;
+          max-height: 380px;
           overflow-y: auto;
         }
 
@@ -139,12 +211,11 @@ export default function RecordingGallery({ refreshTrigger }) {
         }
 
         .recording-thumb {
+          position: relative;
           border: 1px solid var(--border);
           border-radius: var(--radius);
-          padding: 0;
-          background: transparent;
-          cursor: pointer;
           overflow: hidden;
+          transition: border-color 0.15s;
         }
 
         .recording-thumb video {
@@ -152,6 +223,21 @@ export default function RecordingGallery({ refreshTrigger }) {
           aspect-ratio: 16 / 9;
           display: block;
           object-fit: cover;
+        }
+
+        .recording-label-badge {
+          position: absolute;
+          bottom: 4px;
+          left: 4px;
+          font-size: 8px;
+          font-family: var(--font-display);
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          background: rgba(10,10,10,0.75);
+          border: 1px solid;
+          border-radius: 3px;
+          padding: 1px 5px;
+          pointer-events: none;
         }
 
         .recording-meta {
@@ -178,10 +264,7 @@ export default function RecordingGallery({ refreshTrigger }) {
           flex-shrink: 0;
           transition: color 0.15s;
         }
-
-        .delete-btn:hover {
-          color: var(--red);
-        }
+        .delete-btn:hover { color: var(--red); }
       `}</style>
     </div>
   )

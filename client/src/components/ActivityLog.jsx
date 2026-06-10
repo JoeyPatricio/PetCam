@@ -36,10 +36,18 @@ export default function ActivityLog({ events, onClear }) {
         ) : (
           <>
             {events.map((event) => (
-              <div key={event.id} className="log-entry">
+              <div key={event.id} className={`log-entry${event.type === 'prediction' ? ' log-entry-prediction' : ''}`}>
                 <span className="entry-time">{formatTime(event.timestamp)}</span>
-                <span className="entry-dot" />
-                <span className="entry-msg">{event.message}</span>
+                <span
+                  className={`entry-dot${event.color ? ' colored' : ''}`}
+                  style={event.color ? { background: event.color } : {}}
+                />
+                <span className="entry-msg" style={event.color ? { color: event.color } : {}}>
+                  {event.message}
+                </span>
+                {event.confidence !== undefined && (
+                  <span className="entry-level">{event.confidence}%</span>
+                )}
                 {event.level !== undefined && (
                   <span className="entry-level">{event.level}%</span>
                 )}
@@ -145,6 +153,11 @@ export default function ActivityLog({ events, onClear }) {
           border-radius: 50%;
           background: var(--accent);
           flex-shrink: 0;
+        }
+
+        .entry-dot.colored {
+          width: 6px;
+          height: 6px;
         }
 
         .entry-msg {

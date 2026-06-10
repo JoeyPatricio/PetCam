@@ -4,11 +4,15 @@ import Controls from './components/Controls.jsx'
 import ActivityLog from './components/ActivityLog.jsx'
 import RecordingGallery from './components/RecordingGallery.jsx'
 import LabelingStudio from './components/LabelingStudio.jsx'
+import { lazy, Suspense } from 'react'
+const TrainingStudio = lazy(() => import('./components/TrainingStudio.jsx'))
 import { useWebcam } from './hooks/useWebcam.js'
 import { useMotion } from './hooks/useMotion.js'
+import { useInference } from './hooks/useInference.js'
 
 export default function App() {
-  const [tab, setTab]                     = useState('camera') // 'camera' | 'label'
+  const [tab, setTab]                     = useState('camera') // 'camera' | 'label' | 'train'
+  const [inferenceEnabled, setInferenceEnabled] = useState(false)
   const [events, setEvents]               = useState([])
   const [sensitivity, setSensitivity]     = useState(30)
   const [recordingTick, setRecordingTick] = useState(0)
@@ -18,6 +22,8 @@ export default function App() {
   const recorderRef = useRef(null)
   const chunksRef = useRef([])
   const recordTimeoutRef = useRef(null)
+  const lastPredictionLabelRef = useRef(null)
+  const currentPredictionRef = useRef(null)
 
   // ── Webcam ──────────────────────────────────────────────
   const {
@@ -45,7 +51,31 @@ export default function App() {
     formData.append('video', blob, `recording-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`)
 
     try {
-      await fetch('/api/recordings', { method: 'POST', body: formData })
+      const res  = await fetch('/api/recordings', { method: 'POST', body: formData })
+      const data = await res.json()
+
+      // Auto-label + notify if AI is predicting a non-normal behavior
+      const pred = currentPredictionRef.current
+      if (pred && data.filename) {
+        fetch(`/api/labels/${data.filename}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label: `ml_${pred.label}` }),
+        }).catch(() => {})
+
+        if (pred.label !== 'normal') {
+          fetch('/api/sms/notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              label:      pred.label,
+              confidence: pred.confidence,
+              filename:   data.filename,
+            }),
+          }).catch(() => {})
+        }
+      }
+
       setRecordingTick(t => t + 1)
     } catch (err) {
       console.error('Recording upload failed:', err)
@@ -150,6 +180,49 @@ export default function App() {
     overlayCanvasRef,
   } = useMotion({ videoRef, isActive, sensitivity, onMotion: handleMotion })
 
+  const { status: inferenceStatus, prediction, modelExists } = useInference({
+    videoRef,
+    isActive,
+    enabled: inferenceEnabled,
+  })
+
+  // Keep current prediction accessible inside uploadRecording callback
+  useEffect(() => { currentPredictionRef.current = prediction }, [prediction])
+
+  // Log to activity log + trigger SMS when the predicted label changes
+  useEffect(() => {
+    if (!prediction) { lastPredictionLabelRef.current = null; return }
+    if (prediction.label === lastPredictionLabelRef.current) return
+    lastPredictionLabelRef.current = prediction.label
+
+    const PHRASE = {
+      grooming: 'Bunny is grooming',
+      normal:   'Bunny is resting',
+      standing: 'Bunny is standing up',
+      yawn:     'Bunny is yawning',
+      zoomies:  'Bunny has the zoomies',
+    }
+    const COLOR = {
+      grooming: '#dc82ff', normal: '#88aaff', standing: '#ff9f3c',
+      yawn: '#ffd264', zoomies: '#7dff7d',
+    }
+
+    const id = ++eventIdRef.current
+    setEvents(prev => [
+      ...prev.slice(-199),
+      {
+        id,
+        timestamp: new Date(),
+        type: 'prediction',
+        message: PHRASE[prediction.label] ?? prediction.label,
+        confidence: prediction.confidence,
+        color: COLOR[prediction.label],
+      },
+    ])
+
+    // SMS/email is fired from uploadRecording once a clip is saved (with attachment)
+  }, [prediction])
+
   // ── Notification permission ───────────────────────────────
   const requestNotifications = useCallback(() => {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -197,6 +270,12 @@ export default function App() {
           >
             Label Studio
           </button>
+          <button
+            className={`header-tab ${tab === 'train' ? 'tab-active' : ''}`}
+            onClick={() => setTab('train')}
+          >
+            Training
+          </button>
         </nav>
 
         <div className="header-status">
@@ -209,6 +288,11 @@ export default function App() {
       </header>
 
       {tab === 'label' && <LabelingStudio />}
+      {tab === 'train' && (
+        <Suspense fallback={<div style={{ padding: 32, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Loading TensorFlow.js…</div>}>
+          <TrainingStudio />
+        </Suspense>
+      )}
 
       {/* Main layout — only mounted when on camera tab */}
       <main className="app-main" style={{ display: tab === 'camera' ? 'grid' : 'none' }}>
@@ -220,6 +304,8 @@ export default function App() {
             isActive={isActive}
             isMotion={isMotion}
             error={error}
+            prediction={prediction}
+            inferenceStatus={inferenceStatus}
           />
 
           <div className="controls-card">
@@ -239,6 +325,10 @@ export default function App() {
               onToggleMotion={toggleMotion}
               onSensitivityChange={setSensitivity}
               onSwitchCamera={switchCamera}
+              inferenceEnabled={inferenceEnabled}
+              inferenceStatus={inferenceStatus}
+              modelExists={modelExists}
+              onToggleInference={() => setInferenceEnabled(e => !e)}
             />
           </div>
         </section>

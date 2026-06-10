@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 
-const LABEL_BINKY    = 'binky'
+const LABEL_ZOOMIES  = 'zoomies'
 const LABEL_YAWN     = 'yawn'
 const LABEL_NORMAL   = 'normal'
 const LABEL_GROOMING = 'grooming'
@@ -167,11 +167,12 @@ function formatSize(bytes) {
 
 export default function LabelingStudio() {
   const [recordings, setRecordings] = useState([])  // [{ filename, createdAt, size }]
-  const [labels, setLabels]         = useState({})   // { filename: 'binky'|'normal' }
+  const [labels, setLabels]         = useState({})   // { filename: 'zoomies'|'yawn'|'normal'|'grooming'|'standing' }
   const [index, setIndex]           = useState(0)
-  const [filter, setFilter]         = useState('all') // 'all' | 'unlabeled' | 'binky' | 'yawn' | 'normal' | 'grooming'
+  const [filter, setFilter]         = useState('all') // 'all' | 'unlabeled' | 'zoomies' | 'yawn' | 'normal' | 'grooming' | 'standing'
   const [saving, setSaving]         = useState(false)
   const [loading, setLoading]       = useState(true)
+  const [openMenu, setOpenMenu]     = useState(null)  // filename of open three-dot menu
   const videoRef = useRef(null)
 
   // ── Load recordings + labels ──────────────────────────────────────────────
@@ -214,7 +215,7 @@ export default function LabelingStudio() {
   // ── Filtered + sorted clip list ───────────────────────────────────────────
   const filtered = recordings.filter(r => {
     if (filter === 'unlabeled') return !labels[r.filename]
-    if (filter === 'binky')     return labels[r.filename] === LABEL_BINKY
+    if (filter === 'zoomies')     return labels[r.filename] === LABEL_ZOOMIES
     if (filter === 'yawn')      return labels[r.filename] === LABEL_YAWN
     if (filter === 'normal')    return labels[r.filename] === LABEL_NORMAL
     if (filter === 'grooming')  return labels[r.filename] === LABEL_GROOMING
@@ -269,11 +270,49 @@ export default function LabelingStudio() {
     }
   }, [current, labels])
 
+  const deleteClip = useCallback(async (filename) => {
+    const target = filename || current?.filename
+    if (!target) return
+    if (!window.confirm(`Delete "${target}" permanently? This cannot be undone.`)) return
+    setOpenMenu(null)
+    try {
+      await fetch(`/api/recordings/${target}`, { method: 'DELETE' })
+      await fetch(`/api/labels/${target}`, { method: 'DELETE' }).catch(() => {})
+      setLabels(prev => {
+        const next = { ...prev }
+        delete next[target]
+        return next
+      })
+      setRecordings(prev => prev.filter(r => r.filename !== target))
+      setIndex(prev => Math.max(0, prev > 0 ? prev - 1 : 0))
+    } catch (err) {
+      console.error('Delete failed:', err)
+    }
+  }, [current])
+
+  const downloadClip = useCallback((filename) => {
+    const target = filename || current?.filename
+    if (!target) return
+    setOpenMenu(null)
+    const a = document.createElement('a')
+    a.href = `/recordings/${target}`
+    a.download = target
+    a.click()
+  }, [current])
+
+  // ── Close three-dot menu on outside click ────────────────────────────────
+  useEffect(() => {
+    if (!openMenu) return
+    const close = () => setOpenMenu(null)
+    window.addEventListener('click', close)
+    return () => window.removeEventListener('click', close)
+  }, [openMenu])
+
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return
-      if (e.key === 'b' || e.key === 'B') applyLabel(LABEL_BINKY)
+      if (e.key === 'z' || e.key === 'Z') applyLabel(LABEL_ZOOMIES)
       if (e.key === 'y' || e.key === 'Y') applyLabel(LABEL_YAWN)
       if (e.key === 'n' || e.key === 'N') applyLabel(LABEL_NORMAL)
       if (e.key === 'g' || e.key === 'G') applyLabel(LABEL_GROOMING)
@@ -301,12 +340,12 @@ export default function LabelingStudio() {
 
   // ── Stats ─────────────────────────────────────────────────────────────────
   const totalCount    = recordings.length
-  const binkyCount    = Object.values(labels).filter(l => l === LABEL_BINKY).length
+  const zoomiesCount  = Object.values(labels).filter(l => l === LABEL_ZOOMIES).length
   const yawnCount     = Object.values(labels).filter(l => l === LABEL_YAWN).length
   const normalCount   = Object.values(labels).filter(l => l === LABEL_NORMAL).length
   const groomingCount = Object.values(labels).filter(l => l === LABEL_GROOMING).length
   const standingCount = Object.values(labels).filter(l => l === LABEL_STANDING).length
-  const labeledCount  = binkyCount + yawnCount + normalCount + groomingCount + standingCount
+  const labeledCount  = zoomiesCount + yawnCount + normalCount + groomingCount + standingCount
   const pctDone      = totalCount > 0 ? Math.round((labeledCount / totalCount) * 100) : 0
 
   if (loading) {
@@ -347,7 +386,7 @@ export default function LabelingStudio() {
       <div className="studio-header">
         <div className="studio-title">Label Studio</div>
         <div className="studio-stats">
-          <span className="stat-chip stat-binky">{binkyCount} binky</span>
+          <span className="stat-chip stat-zoomies">{zoomiesCount} zoomies</span>
           <span className="stat-chip stat-yawn">{yawnCount} yawn</span>
           <span className="stat-chip stat-normal">{normalCount} normal</span>
           <span className="stat-chip stat-grooming">{groomingCount} grooming</span>
@@ -362,8 +401,8 @@ export default function LabelingStudio() {
       {/* ── Progress bar ────────────────────────────────────────────────── */}
       <div className="progress-track" title={`${labeledCount} of ${totalCount} labeled`}>
         <div
-          className="progress-binky"
-          style={{ width: `${totalCount > 0 ? (binkyCount / totalCount) * 100 : 0}%` }}
+          className="progress-zoomies"
+          style={{ width: `${totalCount > 0 ? (zoomiesCount / totalCount) * 100 : 0}%` }}
         />
         <div
           className="progress-yawn"
@@ -386,7 +425,7 @@ export default function LabelingStudio() {
 
       {/* ── Filter tabs ─────────────────────────────────────────────────── */}
       <div className="filter-tabs">
-        {['all', 'unlabeled', 'binky', 'yawn', 'normal', 'grooming', 'standing'].map(f => (
+        {['all', 'unlabeled', 'zoomies', 'yawn', 'normal', 'grooming', 'standing'].map(f => (
           <button
             key={f}
             className={`filter-tab ${filter === f ? 'active' : ''}`}
@@ -394,7 +433,7 @@ export default function LabelingStudio() {
           >
             {f === 'all'       ? `All (${totalCount})`                      : ''}
             {f === 'unlabeled' ? `Unlabeled (${totalCount - labeledCount})` : ''}
-            {f === 'binky'     ? `Binky (${binkyCount})`                    : ''}
+            {f === 'zoomies'   ? `Zoomies (${zoomiesCount})`                : ''}
             {f === 'yawn'      ? `Yawn (${yawnCount})`                      : ''}
             {f === 'normal'    ? `Normal (${normalCount})`                  : ''}
             {f === 'grooming'  ? `Grooming (${groomingCount})`              : ''}
@@ -410,7 +449,7 @@ export default function LabelingStudio() {
 
           {/* ── Video player ──────────────────────────────────────────────── */}
           <div className="player-section">
-            <div className={`player-wrap ${currentLabel === LABEL_BINKY ? 'border-binky' : currentLabel === LABEL_YAWN ? 'border-yawn' : currentLabel === LABEL_NORMAL ? 'border-normal' : currentLabel === LABEL_GROOMING ? 'border-grooming' : currentLabel === LABEL_STANDING ? 'border-standing' : ''}`}>
+            <div className={`player-wrap ${currentLabel === LABEL_ZOOMIES ? 'border-zoomies' : currentLabel === LABEL_YAWN ? 'border-yawn' : currentLabel === LABEL_NORMAL ? 'border-normal' : currentLabel === LABEL_GROOMING ? 'border-grooming' : currentLabel === LABEL_STANDING ? 'border-standing' : ''}`}>
               {current && (
                 <video
                   ref={videoRef}
@@ -424,8 +463,8 @@ export default function LabelingStudio() {
                 />
               )}
               {currentLabel && (
-                <div className={`current-label-badge ${currentLabel === LABEL_BINKY ? 'badge-binky' : currentLabel === LABEL_YAWN ? 'badge-yawn' : currentLabel === LABEL_GROOMING ? 'badge-grooming' : currentLabel === LABEL_STANDING ? 'badge-standing' : 'badge-normal'}`}>
-                  {currentLabel === LABEL_BINKY ? '🐇 BINKY' : currentLabel === LABEL_YAWN ? '🥱 YAWN' : currentLabel === LABEL_GROOMING ? '🐾 GROOMING' : currentLabel === LABEL_STANDING ? '🦘 STANDING' : '🚶 NORMAL'}
+                <div className={`current-label-badge ${currentLabel === LABEL_ZOOMIES ? 'badge-zoomies' : currentLabel === LABEL_YAWN ? 'badge-yawn' : currentLabel === LABEL_GROOMING ? 'badge-grooming' : currentLabel === LABEL_STANDING ? 'badge-standing' : 'badge-normal'}`}>
+                  {currentLabel === LABEL_ZOOMIES ? '⚡ ZOOMIES' : currentLabel === LABEL_YAWN ? '🥱 YAWN' : currentLabel === LABEL_GROOMING ? '🐾 GROOMING' : currentLabel === LABEL_STANDING ? '🦘 STANDING' : '🚶 NORMAL'}
                 </div>
               )}
             </div>
@@ -460,13 +499,13 @@ export default function LabelingStudio() {
             {/* Label buttons */}
             <div className="label-buttons">
               <button
-                className={`label-btn btn-binky ${currentLabel === LABEL_BINKY ? 'selected' : ''}`}
-                onClick={() => applyLabel(LABEL_BINKY)}
+                className={`label-btn btn-zoomies ${currentLabel === LABEL_ZOOMIES ? 'selected' : ''}`}
+                onClick={() => applyLabel(LABEL_ZOOMIES)}
                 disabled={saving}
               >
-                <span className="label-btn-icon">🐇</span>
-                <span className="label-btn-text">Binky</span>
-                <span className="label-btn-key">B</span>
+                <span className="label-btn-icon">⚡</span>
+                <span className="label-btn-text">Zoomies</span>
+                <span className="label-btn-key">Z</span>
               </button>
 
               <button
@@ -510,14 +549,19 @@ export default function LabelingStudio() {
               </button>
             </div>
 
-            {currentLabel && (
-              <button className="remove-label-btn" onClick={removeLabel}>
-                ✕ Remove label
+            <div className="clip-actions">
+              {currentLabel && (
+                <button className="remove-label-btn" onClick={removeLabel}>
+                  ✕ Remove label
+                </button>
+              )}
+              <button className="delete-clip-btn" onClick={() => deleteClip()} title="Permanently delete this clip">
+                🗑 Delete clip
               </button>
-            )}
+            </div>
 
             <div className="shortcut-hint">
-              Arrow keys to navigate · B / Y / N / G / S to label · Delete to clear
+              Arrow keys to navigate · Z / Y / N / G / S to label · Delete to clear
             </div>
           </div>
 
@@ -525,25 +569,50 @@ export default function LabelingStudio() {
           <div className="filmstrip">
             {filtered.map((r, i) => {
               const lbl = labels[r.filename]
+              const menuOpen = openMenu === r.filename
               return (
-                <button
+                <div
                   key={r.filename}
-                  className={`strip-thumb ${i === index ? 'strip-current' : ''} ${lbl === LABEL_BINKY ? 'strip-binky' : lbl === LABEL_YAWN ? 'strip-yawn' : lbl === LABEL_NORMAL ? 'strip-normal' : lbl === LABEL_GROOMING ? 'strip-grooming' : lbl === LABEL_STANDING ? 'strip-standing' : 'strip-unlabeled'}`}
-                  onClick={() => setIndex(i)}
+                  className={`strip-thumb ${i === index ? 'strip-current' : ''} ${lbl === LABEL_ZOOMIES ? 'strip-zoomies' : lbl === LABEL_YAWN ? 'strip-yawn' : lbl === LABEL_NORMAL ? 'strip-normal' : lbl === LABEL_GROOMING ? 'strip-grooming' : lbl === LABEL_STANDING ? 'strip-standing' : 'strip-unlabeled'}`}
                   title={`${r.filename} — ${lbl || 'unlabeled'}`}
                 >
+                  {/* Thumbnail — clicking selects the clip */}
                   <video
                     muted
                     preload="metadata"
                     src={`/recordings/${r.filename}#t=0.5`}
                     className="strip-video"
+                    onClick={() => setIndex(i)}
                   />
+
+                  {/* Label badge */}
                   {lbl && (
-                    <span className={`strip-badge ${lbl === LABEL_BINKY ? 'strip-badge-binky' : lbl === LABEL_YAWN ? 'strip-badge-yawn' : lbl === LABEL_GROOMING ? 'strip-badge-grooming' : lbl === LABEL_STANDING ? 'strip-badge-standing' : 'strip-badge-normal'}`}>
-                      {lbl === LABEL_BINKY ? 'B' : lbl === LABEL_YAWN ? 'Y' : lbl === LABEL_GROOMING ? 'G' : lbl === LABEL_STANDING ? 'S' : 'N'}
+                    <span className={`strip-badge ${lbl === LABEL_ZOOMIES ? 'strip-badge-zoomies' : lbl === LABEL_YAWN ? 'strip-badge-yawn' : lbl === LABEL_GROOMING ? 'strip-badge-grooming' : lbl === LABEL_STANDING ? 'strip-badge-standing' : 'strip-badge-normal'}`}>
+                      {lbl === LABEL_ZOOMIES ? 'Z' : lbl === LABEL_YAWN ? 'Y' : lbl === LABEL_GROOMING ? 'G' : lbl === LABEL_STANDING ? 'S' : 'N'}
                     </span>
                   )}
-                </button>
+
+                  {/* Three-dot menu button */}
+                  <button
+                    className="strip-menu-btn"
+                    onClick={e => { e.stopPropagation(); setOpenMenu(menuOpen ? null : r.filename) }}
+                    title="Options"
+                  >
+                    ⋯
+                  </button>
+
+                  {/* Dropdown */}
+                  {menuOpen && (
+                    <div className="strip-menu" onClick={e => e.stopPropagation()}>
+                      <button className="strip-menu-item" onClick={() => downloadClip(r.filename)}>
+                        ↓ Download
+                      </button>
+                      <button className="strip-menu-item strip-menu-delete" onClick={() => deleteClip(r.filename)}>
+                        🗑 Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
               )
             })}
           </div>
@@ -586,7 +655,7 @@ export default function LabelingStudio() {
           border: 1px solid transparent;
         }
 
-        .stat-binky     { background: rgba(125, 255, 125, 0.1); border-color: rgba(125, 255, 125, 0.3); color: #7dff7d; }
+        .stat-zoomies     { background: rgba(125, 255, 125, 0.1); border-color: rgba(125, 255, 125, 0.3); color: #7dff7d; }
         .stat-yawn      { background: rgba(255, 210, 100, 0.1); border-color: rgba(255, 210, 100, 0.3); color: #ffd264; }
         .stat-normal    { background: rgba(100, 160, 255, 0.1); border-color: rgba(100, 160, 255, 0.3); color: #88aaff; }
         .stat-grooming  { background: rgba(220, 130, 255, 0.1); border-color: rgba(220, 130, 255, 0.3); color: #dc82ff; }
@@ -620,7 +689,7 @@ export default function LabelingStudio() {
           display: flex;
         }
 
-        .progress-binky    { height: 100%; background: #7dff7d; transition: width 0.3s ease; }
+        .progress-zoomies    { height: 100%; background: #7dff7d; transition: width 0.3s ease; }
         .progress-yawn     { height: 100%; background: #ffd264; transition: width 0.3s ease; }
         .progress-normal   { height: 100%; background: #88aaff; transition: width 0.3s ease; }
         .progress-grooming { height: 100%; background: #dc82ff; transition: width 0.3s ease; }
@@ -696,7 +765,7 @@ export default function LabelingStudio() {
           transition: border-color 0.2s ease;
         }
 
-        .border-binky    { border-color: rgba(125, 255, 125, 0.6); }
+        .border-zoomies    { border-color: rgba(125, 255, 125, 0.6); }
         .border-yawn     { border-color: rgba(255, 210, 100, 0.6); }
         .border-normal   { border-color: rgba(136, 170, 255, 0.6); }
         .border-grooming { border-color: rgba(220, 130, 255, 0.6); }
@@ -721,7 +790,7 @@ export default function LabelingStudio() {
           font-weight: 600;
         }
 
-        .badge-binky    { background: rgba(0, 0, 0, 0.7); color: #7dff7d; border: 1px solid rgba(125,255,125,0.4); }
+        .badge-zoomies    { background: rgba(0, 0, 0, 0.7); color: #7dff7d; border: 1px solid rgba(125,255,125,0.4); }
         .badge-yawn     { background: rgba(0, 0, 0, 0.7); color: #ffd264; border: 1px solid rgba(255,210,100,0.4); }
         .badge-normal   { background: rgba(0, 0, 0, 0.7); color: #88aaff; border: 1px solid rgba(136,170,255,0.4); }
         .badge-grooming { background: rgba(0, 0, 0, 0.7); color: #dc82ff; border: 1px solid rgba(220,130,255,0.4); }
@@ -806,14 +875,14 @@ export default function LabelingStudio() {
 
         .label-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        .btn-binky {
+        .btn-zoomies {
           background: rgba(125, 255, 125, 0.08);
           border-color: rgba(125, 255, 125, 0.25);
           color: rgba(125, 255, 125, 0.8);
         }
 
-        .btn-binky:hover:not(:disabled),
-        .btn-binky.selected {
+        .btn-zoomies:hover:not(:disabled),
+        .btn-zoomies.selected {
           background: rgba(125, 255, 125, 0.18);
           border-color: rgba(125, 255, 125, 0.7);
           color: #7dff7d;
@@ -888,7 +957,14 @@ export default function LabelingStudio() {
           opacity: 0.6;
         }
 
-        /* Remove label */
+        /* Clip action row */
+        .clip-actions {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+          justify-content: center;
+        }
+
         .remove-label-btn {
           font-size: 11px;
           padding: 4px 12px;
@@ -897,12 +973,25 @@ export default function LabelingStudio() {
           color: var(--text-muted);
           border-radius: var(--radius);
           font-family: var(--font-mono);
-          align-self: center;
           cursor: pointer;
           transition: all 0.15s;
         }
 
         .remove-label-btn:hover { color: var(--red); border-color: var(--red-dim); }
+
+        .delete-clip-btn {
+          font-size: 11px;
+          padding: 4px 12px;
+          background: none;
+          border: 1px solid var(--border);
+          color: var(--text-muted);
+          border-radius: var(--radius);
+          font-family: var(--font-mono);
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+
+        .delete-clip-btn:hover { color: var(--red); border-color: var(--red-dim); background: rgba(255,80,80,0.06); }
 
         /* Hint */
         .shortcut-hint {
@@ -920,6 +1009,7 @@ export default function LabelingStudio() {
           gap: 4px;
           max-height: 680px;
           overflow-y: auto;
+          overflow-x: visible;
           padding-right: 4px;
         }
 
@@ -930,9 +1020,9 @@ export default function LabelingStudio() {
         .strip-thumb {
           position: relative;
           border-radius: var(--radius);
-          overflow: hidden;
+          overflow: visible;
           border: 2px solid transparent;
-          cursor: pointer;
+          cursor: default;
           transition: border-color 0.15s;
           padding: 0;
           background: var(--bg-card);
@@ -940,8 +1030,68 @@ export default function LabelingStudio() {
         }
 
         .strip-thumb:hover        { border-color: var(--border-light); }
+        .strip-thumb:hover .strip-menu-btn { opacity: 1; }
+
+        /* Three-dot button */
+        .strip-menu-btn {
+          position: absolute;
+          top: 3px;
+          right: 3px;
+          width: 20px;
+          height: 20px;
+          border-radius: 4px;
+          background: rgba(0, 0, 0, 0.65);
+          backdrop-filter: blur(4px);
+          border: 1px solid rgba(255,255,255,0.1);
+          color: #fff;
+          font-size: 13px;
+          line-height: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          opacity: 0;
+          transition: opacity 0.15s, background 0.15s;
+          z-index: 20;
+          padding: 0;
+        }
+
+        .strip-menu-btn:hover { background: rgba(0,0,0,0.85); }
+
+        /* Dropdown */
+        .strip-menu {
+          position: absolute;
+          top: 26px;
+          right: 0;
+          background: var(--bg-surface);
+          border: 1px solid var(--border-light);
+          border-radius: var(--radius);
+          box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+          z-index: 100;
+          min-width: 110px;
+          overflow: hidden;
+        }
+
+        .strip-menu-item {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          width: 100%;
+          padding: 7px 12px;
+          font-size: 11px;
+          font-family: var(--font-mono);
+          color: var(--text-secondary);
+          background: none;
+          border: none;
+          text-align: left;
+          cursor: pointer;
+          transition: background 0.1s, color 0.1s;
+        }
+
+        .strip-menu-item:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+        .strip-menu-delete:hover { color: var(--red); }
         .strip-current            { border-color: var(--accent) !important; }
-        .strip-binky:not(.strip-current)    { border-color: rgba(125, 255, 125, 0.35); }
+        .strip-zoomies:not(.strip-current)    { border-color: rgba(125, 255, 125, 0.35); }
         .strip-yawn:not(.strip-current)     { border-color: rgba(255, 210, 100, 0.35); }
         .strip-normal:not(.strip-current)   { border-color: rgba(136, 170, 255, 0.35); }
         .strip-grooming:not(.strip-current) { border-color: rgba(220, 130, 255, 0.35); }
@@ -952,7 +1102,10 @@ export default function LabelingStudio() {
           aspect-ratio: 16 / 9;
           object-fit: cover;
           display: block;
-          pointer-events: none;
+          pointer-events: auto;
+          cursor: pointer;
+          border-radius: calc(var(--radius) - 2px);
+          overflow: hidden;
         }
 
         .strip-badge {
@@ -966,7 +1119,7 @@ export default function LabelingStudio() {
           font-family: var(--font-mono);
         }
 
-        .strip-badge-binky    { background: rgba(0,0,0,0.75); color: #7dff7d; }
+        .strip-badge-zoomies    { background: rgba(0,0,0,0.75); color: #7dff7d; }
         .strip-badge-yawn     { background: rgba(0,0,0,0.75); color: #ffd264; }
         .strip-badge-normal   { background: rgba(0,0,0,0.75); color: #88aaff; }
         .strip-badge-grooming { background: rgba(0,0,0,0.75); color: #dc82ff; }
@@ -1135,7 +1288,7 @@ export default function LabelingStudio() {
             flex-direction: row;
             max-height: none;
             overflow-x: auto;
-            overflow-y: hidden;
+            overflow-y: visible;
           }
 
           .strip-thumb { width: 120px; flex-shrink: 0; }

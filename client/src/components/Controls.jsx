@@ -13,6 +13,9 @@ export default function Controls({
   sensitivity,
   devices,
   selectedDevice,
+  inferenceEnabled,
+  inferenceStatus,
+  modelExists,
   onStart,
   onStop,
   onRecord,
@@ -20,6 +23,7 @@ export default function Controls({
   onToggleMotion,
   onSensitivityChange,
   onSwitchCamera,
+  onToggleInference,
 }) {
   const [recording, setRecording] = useState(false)
 
@@ -66,6 +70,17 @@ export default function Controls({
         >
           {motionEnabled ? '👁 Motion On' : '👁 Motion Off'}
         </button>
+
+        {modelExists && (
+          <button
+            className={`btn btn-secondary ${inferenceEnabled ? 'btn-active' : ''}`}
+            onClick={onToggleInference}
+            disabled={!isActive || inferenceStatus === 'loading'}
+            title={inferenceEnabled ? 'Disable live behavior detection' : 'Enable live behavior detection'}
+          >
+            {inferenceStatus === 'loading' ? '⏳ Loading…' : inferenceEnabled ? '🧠 AI On' : '🧠 AI Off'}
+          </button>
+        )}
 
       </div>
 

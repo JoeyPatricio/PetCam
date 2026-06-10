@@ -1,10 +1,18 @@
 import React from 'react'
 
+const LABEL_PHRASE = {
+  grooming: 'Bunny is grooming',
+  normal:   'Bunny is resting',
+  standing: 'Bunny is standing up',
+  yawn:     'Bunny is yawning',
+  zoomies:  'Bunny has the zoomies',
+}
+
 /**
  * VideoFeed
  * Renders the live webcam video with the motion detection overlay canvas on top.
  */
-export default function VideoFeed({ videoRef, overlayCanvasRef, isActive, isMotion, error }) {
+export default function VideoFeed({ videoRef, overlayCanvasRef, isActive, isMotion, error, prediction, inferenceStatus }) {
   return (
     <div className="video-feed-wrapper">
       {isMotion && <div className="motion-ring" aria-hidden="true" />}
@@ -44,6 +52,19 @@ export default function VideoFeed({ videoRef, overlayCanvasRef, isActive, isMoti
         <div className="live-badge" aria-label="Live">
           <span className="live-dot" />
           LIVE
+        </div>
+      )}
+
+      {inferenceStatus === 'loading' && (
+        <div className="inference-loading">loading model…</div>
+      )}
+
+      {prediction && (
+        <div className="prediction-badge" style={{ borderColor: prediction.color }}>
+          <span className="pred-label" style={{ color: prediction.color }}>
+            {LABEL_PHRASE[prediction.label] ?? prediction.label}
+          </span>
+          <span className="pred-conf">{prediction.confidence}%</span>
         </div>
       )}
 
@@ -140,6 +161,56 @@ export default function VideoFeed({ videoRef, overlayCanvasRef, isActive, isMoti
         @keyframes blink {
           0%, 100% { opacity: 1; }
           50%       { opacity: 0.3; }
+        }
+
+        .inference-loading {
+          position: absolute;
+          bottom: 12px;
+          left: 12px;
+          background: rgba(15, 13, 10, 0.75);
+          backdrop-filter: blur(6px);
+          border: 1px solid var(--border);
+          border-radius: 4px;
+          padding: 4px 10px;
+          font-size: 10px;
+          color: var(--text-muted);
+          letter-spacing: 0.08em;
+          z-index: 8;
+          animation: pulse-opacity 1.4s ease-in-out infinite;
+        }
+
+        @keyframes pulse-opacity {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.4; }
+        }
+
+        .prediction-badge {
+          position: absolute;
+          bottom: 12px;
+          left: 12px;
+          background: rgba(15, 13, 10, 0.82);
+          backdrop-filter: blur(8px);
+          border: 1px solid;
+          border-radius: 6px;
+          padding: 6px 12px;
+          display: flex;
+          align-items: baseline;
+          gap: 8px;
+          z-index: 8;
+        }
+
+        .pred-label {
+          font-family: var(--font-display);
+          font-size: 15px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+        }
+
+        .pred-conf {
+          font-size: 11px;
+          color: var(--text-muted);
+          font-family: var(--font-mono);
         }
       `}</style>
     </div>

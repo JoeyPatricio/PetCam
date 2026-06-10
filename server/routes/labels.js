@@ -39,8 +39,10 @@ router.post('/:filename', async (req, res) => {
   if (!filename.startsWith('recording-') || !filename.endsWith('.webm')) {
     return res.status(400).json({ error: 'Invalid filename' })
   }
-  if (!['binky', 'yawn', 'normal', 'grooming', 'standing'].includes(label)) {
-    return res.status(400).json({ error: 'Label must be "binky", "yawn", "normal", "grooming", or "standing"' })
+  const VALID = ['zoomies','yawn','normal','grooming','standing',
+                 'ml_zoomies','ml_yawn','ml_normal','ml_grooming','ml_standing']
+  if (!VALID.includes(label)) {
+    return res.status(400).json({ error: `Invalid label: ${label}` })
   }
 
   try {
