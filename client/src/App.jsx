@@ -4,6 +4,7 @@ import Controls from './components/Controls.jsx'
 import ActivityLog from './components/ActivityLog.jsx'
 import RecordingGallery from './components/RecordingGallery.jsx'
 import LabelingStudio from './components/LabelingStudio.jsx'
+import DemoView from './components/DemoView.jsx'
 import { lazy, Suspense } from 'react'
 const TrainingStudio = lazy(() => import('./components/TrainingStudio.jsx'))
 import { useWebcam } from './hooks/useWebcam.js'
@@ -11,12 +12,17 @@ import { useMotion } from './hooks/useMotion.js'
 import { useInference } from './hooks/useInference.js'
 
 export default function App() {
+  const [authed, setAuthed]               = useState(null) // null = checking | false | true
   const [tab, setTab]                     = useState('camera') // 'camera' | 'label' | 'train'
-  const [inferenceEnabled, setInferenceEnabled] = useState(false)
+  const [inferenceEnabled, setInferenceEnabled] = useState(
+    () => localStorage.getItem('bunnycam.aiEnabled') === 'true'
+  )
   const [events, setEvents]               = useState([])
   const [sensitivity, setSensitivity]     = useState(30)
   const [recordingTick, setRecordingTick] = useState(0)
-  const [autoRecordEnabled, setAutoRecordEnabled] = useState(false)
+  const [autoRecordEnabled, setAutoRecordEnabled] = useState(
+    () => localStorage.getItem('bunnycam.autoRecord') === 'true'
+  )
   const [isRecording, setIsRecording]     = useState(false)
   const eventIdRef = useRef(0)
   const recorderRef = useRef(null)
@@ -186,8 +192,30 @@ export default function App() {
     enabled: inferenceEnabled,
   })
 
+  // Check admin session on load
+  useEffect(() => {
+    fetch('/api/auth/check')
+      .then(r => r.json())
+      .then(d => setAuthed(!!d.authed))
+      .catch(() => setAuthed(false))
+  }, [])
+
+  const handleLogout = useCallback(async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    stopCamera()
+    setAuthed(false)
+  }, [stopCamera])
+
   // Keep current prediction accessible inside uploadRecording callback
   useEffect(() => { currentPredictionRef.current = prediction }, [prediction])
+
+  // Persist toggles so a page reload doesn't disarm overnight monitoring
+  useEffect(() => {
+    localStorage.setItem('bunnycam.aiEnabled', String(inferenceEnabled))
+  }, [inferenceEnabled])
+  useEffect(() => {
+    localStorage.setItem('bunnycam.autoRecord', String(autoRecordEnabled))
+  }, [autoRecordEnabled])
 
   // Log to activity log + trigger SMS when the predicted label changes
   useEffect(() => {
@@ -220,6 +248,13 @@ export default function App() {
       },
     ])
 
+    // Publish to the server's public text-only demo feed
+    fetch('/api/predictions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: prediction.label, confidence: prediction.confidence }),
+    }).catch(() => {})
+
     // SMS/email is fired from uploadRecording once a clip is saved (with attachment)
   }, [prediction])
 
@@ -247,6 +282,14 @@ export default function App() {
       }
     }
   }, [])
+
+  // ── Auth gate ───────────────────────────────────────────
+  if (authed === null) {
+    return <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>…</div>
+  }
+  if (!authed) {
+    return <DemoView onLogin={() => setAuthed(true)} />
+  }
 
   return (
     <div className="app">
@@ -284,6 +327,9 @@ export default function App() {
           ) : (
             <span className="status-idle">○ idle</span>
           )}
+          <button className="logout-btn" onClick={handleLogout} title="Log out to demo view">
+            Log out
+          </button>
         </div>
       </header>
 
@@ -398,7 +444,24 @@ export default function App() {
           border-bottom-color: var(--accent) !important;
         }
 
-        .header-status { margin-left: auto; }
+        .header-status {
+          margin-left: auto;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .logout-btn {
+          background: none;
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          color: var(--text-muted);
+          font-size: 10px;
+          padding: 3px 9px;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+        .logout-btn:hover { color: var(--text-secondary); border-color: var(--border-light); }
 
         .logo-emoji { font-size: 22px; }
 
