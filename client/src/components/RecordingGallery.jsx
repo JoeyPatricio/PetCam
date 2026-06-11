@@ -7,22 +7,16 @@ const BASE_COLOR = {
 
 const labelColor = (lbl) => {
   if (!lbl) return 'var(--text-muted)'
-  return BASE_COLOR[lbl.replace('ml_', '')] ?? 'var(--text-muted)'
+  return BASE_COLOR[lbl] ?? 'var(--text-muted)'
 }
 
 const labelDisplay = (lbl) => {
   if (!lbl) return 'Unlabeled'
-  if (lbl.startsWith('ml_')) return `ML ${lbl.slice(3).charAt(0).toUpperCase()}${lbl.slice(4)}`
   return lbl.charAt(0).toUpperCase() + lbl.slice(1)
 }
 
 const FILTER_OPTIONS = [
   { value: 'all',          label: 'All' },
-  { value: 'ml_zoomies',   label: 'ML Zoomies' },
-  { value: 'ml_yawn',      label: 'ML Yawn' },
-  { value: 'ml_grooming',  label: 'ML Grooming' },
-  { value: 'ml_standing',  label: 'ML Standing' },
-  { value: 'ml_normal',    label: 'ML Normal' },
   { value: 'zoomies',      label: 'Zoomies' },
   { value: 'yawn',         label: 'Yawn' },
   { value: 'grooming',     label: 'Grooming' },

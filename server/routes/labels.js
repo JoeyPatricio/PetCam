@@ -1,25 +1,9 @@
 import express from 'express'
-import path from 'path'
-import fs from 'fs/promises'
-import { fileURLToPath } from 'url'
-
-const __dirname  = path.dirname(fileURLToPath(import.meta.url))
-const LABELS_FILE = path.join(__dirname, '..', 'labels.json')
+import { readLabels, updateLabels } from '../lib/labelStore.js'
 
 const router = express.Router()
 
-async function readLabels() {
-  try {
-    const raw = await fs.readFile(LABELS_FILE, 'utf-8')
-    return JSON.parse(raw)
-  } catch {
-    return {}
-  }
-}
-
-async function writeLabels(labels) {
-  await fs.writeFile(LABELS_FILE, JSON.stringify(labels, null, 2))
-}
+const VALID = ['zoomies','yawn','normal','grooming','standing']
 
 // GET /api/labels — return all labels
 router.get('/', async (_req, res) => {
@@ -39,16 +23,12 @@ router.post('/:filename', async (req, res) => {
   if (!filename.startsWith('recording-') || !filename.endsWith('.webm')) {
     return res.status(400).json({ error: 'Invalid filename' })
   }
-  const VALID = ['zoomies','yawn','normal','grooming','standing',
-                 'ml_zoomies','ml_yawn','ml_normal','ml_grooming','ml_standing']
   if (!VALID.includes(label)) {
     return res.status(400).json({ error: `Invalid label: ${label}` })
   }
 
   try {
-    const labels = await readLabels()
-    labels[filename] = label
-    await writeLabels(labels)
+    await updateLabels(labels => { labels[filename] = label; return labels })
     res.json({ filename, label })
   } catch (err) {
     res.status(500).json({ error: 'Failed to save label', detail: err.message })
@@ -58,11 +38,8 @@ router.post('/:filename', async (req, res) => {
 // DELETE /api/labels/:filename — remove label from a clip
 router.delete('/:filename', async (req, res) => {
   const { filename } = req.params
-
   try {
-    const labels = await readLabels()
-    delete labels[filename]
-    await writeLabels(labels)
+    await updateLabels(labels => { delete labels[filename]; return labels })
     res.json({ deleted: filename })
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete label', detail: err.message })

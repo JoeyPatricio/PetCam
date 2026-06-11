@@ -2,26 +2,23 @@ import express from 'express'
 import nodemailer from 'nodemailer'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { readMonitorState } from './monitor.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const router    = express.Router()
 
-const ALERT_LABELS = new Set(['zoomies','yawn','grooming','standing',
-                               'ml_zoomies','ml_yawn','ml_grooming','ml_standing'])
+const ALERT_LABELS = new Set(['zoomies','yawn','grooming','standing'])
 
 const LABEL_PHRASE = {
-  zoomies:    'doing zoomies 🐇💨',
-  yawn:       'yawning 😪',
-  grooming:   'grooming 🐾',
-  standing:   'standing up 🦘',
-  ml_zoomies: 'doing zoomies 🐇💨',
-  ml_yawn:    'yawning 😪',
-  ml_grooming:'grooming 🐾',
-  ml_standing:'standing up 🦘',
+  zoomies:  'doing zoomies 🐇💨',
+  yawn:     'yawning 😪',
+  grooming: 'grooming 🐾',
+  standing: 'standing up 🦘',
 }
 
-// In-memory cooldown map: baseLabel → timestamp of last alert sent
-const lastSent = {}
+// Global cooldown — one timer across ALL alert behaviors, so flickering
+// predictions (standing↔zoomies↔grooming) can't each fire their own email.
+let lastSentAny = 0
 
 function isConfigured() {
   return !!(process.env.EMAIL_USER && process.env.EMAIL_PASS && process.env.NOTIFY_TO)
@@ -57,12 +54,17 @@ router.post('/notify', async (req, res) => {
     return res.json({ sent: false, reason: 'email not configured — add .env' })
   }
 
-  // Cooldown check
+  // Respect the dashboard's email-alerts toggle
+  const { emailAlerts } = await readMonitorState()
+  if (!emailAlerts) {
+    return res.json({ sent: false, reason: 'email alerts disabled from dashboard' })
+  }
+
+  // Global cooldown check (one timer for all behaviors)
   const cooldownMs = Number(process.env.NOTIFY_COOLDOWN_MINUTES ?? 10) * 60 * 1000
-  const baseLabel  = label.replace('ml_', '')
   const now        = Date.now()
-  if (lastSent[baseLabel] && now - lastSent[baseLabel] < cooldownMs) {
-    const waitMin = Math.ceil((cooldownMs - (now - lastSent[baseLabel])) / 60000)
+  if (lastSentAny && now - lastSentAny < cooldownMs) {
+    const waitMin = Math.ceil((cooldownMs - (now - lastSentAny)) / 60000)
     return res.json({ sent: false, reason: `cooldown — ${waitMin}m remaining` })
   }
 
@@ -91,7 +93,7 @@ router.post('/notify', async (req, res) => {
     const transporter = createTransport()
     await transporter.sendMail(mailOptions)
 
-    lastSent[baseLabel] = now
+    lastSentAny = now
     res.json({ sent: true, label, hasAttachment: !!filename })
   } catch (err) {
     console.error('Email send failed:', err.message)

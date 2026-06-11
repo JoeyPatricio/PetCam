@@ -150,7 +150,7 @@ export default function DemoView({ onLogin }) {
                   className="demo-clip-label"
                   style={{ color: BASE_COLOR[base], borderColor: BASE_COLOR[base] }}
                 >
-                  {clip.label.startsWith('ml_') ? `🤖 ${base}` : base}
+                  {base}
                 </span>
               </div>
             )

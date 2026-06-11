@@ -7,3 +7,9 @@ server/labels.json
 server/recordings/
 server/tmp/
 .env
+segments/
+server/agent/segments/
+server/backups/
+server/labels.json.tmp
+server/labels.json.bak
+server/monitor.json

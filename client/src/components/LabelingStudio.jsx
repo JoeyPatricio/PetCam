@@ -241,16 +241,24 @@ export default function LabelingStudio() {
     if (!current || saving) return
     setSaving(true)
     try {
-      await fetch(`/api/labels/${current.filename}`, {
+      const res = await fetch(`/api/labels/${current.filename}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ label }),
       })
+      if (!res.ok) {
+        const detail = res.status === 401
+          ? 'Not logged in — your session expired. Reload and log in again.'
+          : `Save failed (HTTP ${res.status})`
+        alert(detail)
+        return // do NOT optimistically update — the label did not save
+      }
       setLabels(prev => ({ ...prev, [current.filename]: label }))
       // Advance to next clip automatically
       setIndex(prev => Math.min(prev + 1, filtered.length - 1))
     } catch (err) {
       console.error('Label save failed:', err)
+      alert('Label save failed — check your connection.')
     } finally {
       setSaving(false)
     }

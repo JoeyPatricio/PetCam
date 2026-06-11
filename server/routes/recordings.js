@@ -7,10 +7,29 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const RECORDINGS_DIR = path.join(__dirname, '..', 'recordings')
+const SEG_DIR        = path.join(__dirname, '..', 'agent', 'segments')
 
 const router = express.Router()
 
 await fs.mkdir(RECORDINGS_DIR, { recursive: true })
+
+// POST /api/recordings/grab — save the agent's most recent finished segment
+// as a plain (unlabeled) recording. Used by the live-feed Record button.
+router.post('/grab', async (_req, res) => {
+  try {
+    const files = (await fs.readdir(SEG_DIR).catch(() => []))
+      .filter(f => f.endsWith('.webm')).sort()
+    const seg = files.length >= 2 ? files[files.length - 2] : files[0]
+    if (!seg) return res.status(409).json({ error: 'No segment available — is the agent running?' })
+
+    const stamp    = new Date().toISOString().replace(/[:.]/g, '-')
+    const filename = `recording-manual-${stamp}.webm`
+    await fs.copyFile(path.join(SEG_DIR, seg), path.join(RECORDINGS_DIR, filename))
+    res.json({ filename })
+  } catch (err) {
+    res.status(500).json({ error: 'Grab failed', detail: err.message })
+  }
+})
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, RECORDINGS_DIR),
