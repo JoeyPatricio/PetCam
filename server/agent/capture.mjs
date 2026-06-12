@@ -62,6 +62,26 @@ async function login() {
   log('✓ Logged in to server')
 }
 
+// Retry login until the server is up — handles boot-time race where the agent
+// starts before the server finishes initializing.
+async function loginWithRetry(maxWaitMs = 60_000) {
+  const start = Date.now()
+  let attempt = 0
+  while (true) {
+    try {
+      await login()
+      return
+    } catch (err) {
+      attempt++
+      const elapsed = Date.now() - start
+      if (elapsed >= maxWaitMs) throw new Error(`Server unreachable after ${maxWaitMs / 1000}s: ${err.message}`)
+      const delay = Math.min(3000 * attempt, 15_000)
+      log(`⏳ Server not ready (attempt ${attempt}) — retrying in ${delay / 1000}s…`)
+      await new Promise(r => setTimeout(r, delay))
+    }
+  }
+}
+
 const api = async (route, opts = {}) => {
   const call = () => fetch(`${SERVER}${route}`, {
     ...opts,
@@ -214,7 +234,7 @@ function startCapture() {
   const args = [
     '-hide_banner', '-loglevel', 'error',
     '-f', CAMERA_FORMAT,
-    ...(CAMERA_FORMAT === 'dshow' ? ['-rtbufsize', '100M'] : []),
+    ...(CAMERA_FORMAT === 'dshow' ? ['-rtbufsize', '100M', '-framerate', '15'] : []),
     '-i', CAMERA_INPUT,
     // Output 1: raw frames for inference
     '-vf', `fps=1/${FRAME_INTERVAL},scale=224:224`,
@@ -307,7 +327,7 @@ async function pollMonitor() {
 // ── Boot ────────────────────────────────────────────────────────────────────
 console.log('🐇 BunnyCam Agent starting…')
 await fs.mkdir(SEG_DIR, { recursive: true })
-await login()
+await loginWithRetry()
 await loadModels()
 
 const initial = await (await fetch(`${SERVER}/api/monitor`)).json().catch(() => ({ enabled: true }))

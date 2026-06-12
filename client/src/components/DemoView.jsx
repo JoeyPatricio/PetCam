@@ -17,6 +17,7 @@ const baseOf = (lbl) => (lbl || '').replace('ml_', '')
 export default function DemoView({ onLogin }) {
   const [clips, setClips]           = useState([])
   const [feed, setFeed]             = useState([])
+  const [agentLive, setAgentLive]   = useState(false)
   const [showLogin, setShowLogin]   = useState(false)
   const [password, setPassword]     = useState('')
   const [loginError, setLoginError] = useState('')
@@ -34,6 +35,18 @@ export default function DemoView({ onLogin }) {
         .slice(0, 12)
       setClips(labeled)
     }).catch(() => {})
+  }, [])
+
+  // Poll whether the agent is actively streaming frames
+  useEffect(() => {
+    const poll = () =>
+      fetch('/api/stream/status')
+        .then(r => r.json())
+        .then(d => setAgentLive(!!d.live))
+        .catch(() => setAgentLive(false))
+    poll()
+    const id = setInterval(poll, 5000)
+    return () => clearInterval(id)
   }, [])
 
   // Poll the live prediction text feed
@@ -73,8 +86,7 @@ export default function DemoView({ onLogin }) {
   const fmtTime = (iso) =>
     new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-  const isLive = feed.length > 0 &&
-    (Date.now() - new Date(feed[0].time).getTime()) < 60_000
+  const isLive = agentLive
 
   return (
     <div className="demo">
