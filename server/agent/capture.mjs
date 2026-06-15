@@ -90,7 +90,7 @@ const api = async (route, opts = {}) => {
   let res = await call()
   // Server restarts wipe in-memory sessions — re-login and retry once
   if (res.status === 401) {
-    await login().catch(() => {})
+    await login().catch(err => log('⚠ Re-login failed:', err.message))
     res = await call()
   }
   return res

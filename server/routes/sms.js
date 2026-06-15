@@ -16,9 +16,11 @@ const LABEL_PHRASE = {
   standing: 'standing up 🦘',
 }
 
-// Global cooldown — one timer across ALL alert behaviors, so flickering
-// predictions (standing↔zoomies↔grooming) can't each fire their own email.
-let lastSentAny = 0
+// Per-label cooldown map — each behavior has its own timer so a yawn 3 minutes
+// after zoomies still fires, but the same label can't spam every few seconds.
+// A global floor (half the cooldown) still prevents rapid cross-label bursts.
+const lastSentAt = {}   // { label: timestamp }
+let   lastSentAny = 0   // global floor
 
 function isConfigured() {
   return !!(process.env.EMAIL_USER && process.env.EMAIL_PASS && process.env.NOTIFY_TO)
@@ -60,12 +62,19 @@ router.post('/notify', async (req, res) => {
     return res.json({ sent: false, reason: 'email alerts disabled from dashboard' })
   }
 
-  // Global cooldown check (one timer for all behaviors)
   const cooldownMs = Number(process.env.NOTIFY_COOLDOWN_MINUTES ?? 10) * 60 * 1000
-  const now        = Date.now()
-  if (lastSentAny && now - lastSentAny < cooldownMs) {
-    const waitMin = Math.ceil((cooldownMs - (now - lastSentAny)) / 60000)
-    return res.json({ sent: false, reason: `cooldown — ${waitMin}m remaining` })
+  const globalFloor = cooldownMs / 2   // minimum gap between ANY two alerts
+  const now = Date.now()
+
+  // Global floor — prevents cross-label bursts (e.g. standing→zoomies→grooming)
+  if (lastSentAny && now - lastSentAny < globalFloor) {
+    const waitSec = Math.ceil((globalFloor - (now - lastSentAny)) / 1000)
+    return res.json({ sent: false, reason: `global floor — ${waitSec}s remaining` })
+  }
+  // Per-label cooldown — same behavior can't repeat within the full cooldown window
+  if (lastSentAt[label] && now - lastSentAt[label] < cooldownMs) {
+    const waitMin = Math.ceil((cooldownMs - (now - lastSentAt[label])) / 60000)
+    return res.json({ sent: false, reason: `cooldown (${label}) — ${waitMin}m remaining` })
   }
 
   try {
@@ -81,19 +90,20 @@ router.post('/notify', async (req, res) => {
       text,
     }
 
-    // Attach the clip if a filename was provided
+    // Attach the clip if a filename was provided (validate before building path)
     if (filename) {
+      if (!filename.startsWith('recording-') || !filename.endsWith('.webm')) {
+        return res.status(400).json({ sent: false, error: 'Invalid filename' })
+      }
       const clipPath = path.join(__dirname, '..', 'recordings', filename)
-      mailOptions.attachments = [{
-        filename,
-        path: clipPath,
-      }]
+      mailOptions.attachments = [{ filename, path: clipPath }]
     }
 
     const transporter = createTransport()
     await transporter.sendMail(mailOptions)
 
     lastSentAny = now
+    lastSentAt[label] = now
     res.json({ sent: true, label, hasAttachment: !!filename })
   } catch (err) {
     console.error('Email send failed:', err.message)

@@ -1,9 +1,13 @@
 import express from 'express'
 import { readLabels, updateLabels } from '../lib/labelStore.js'
+import { VALID_LABELS } from '../lib/validLabels.js'
 
 const router = express.Router()
 
-const VALID = ['zoomies','yawn','normal','grooming','standing']
+const VALID = VALID_LABELS
+
+// GET /api/labels/valid — return the canonical label list
+router.get('/valid', (_req, res) => res.json({ labels: VALID_LABELS }))
 
 // GET /api/labels — return all labels
 router.get('/', async (_req, res) => {

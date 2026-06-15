@@ -3,12 +3,14 @@ import path from 'path'
 import fs from 'fs/promises'
 import { fileURLToPath } from 'url'
 
-const __dirname  = path.dirname(fileURLToPath(import.meta.url))
-const MODEL_DIR  = path.join(__dirname, '..', 'model')
+const __dirname   = path.dirname(fileURLToPath(import.meta.url))
+const MODEL_DIR   = path.join(__dirname, '..', 'model')
+const BACKUP_DIR  = path.join(MODEL_DIR, 'backups')
 
 const router = express.Router()
 
-await fs.mkdir(MODEL_DIR, { recursive: true })
+await fs.mkdir(MODEL_DIR,  { recursive: true })
+await fs.mkdir(BACKUP_DIR, { recursive: true })
 
 // POST /api/model — save tfjs model (model.json + weights)
 // Body: { modelJson: {...}, weightData: [...] }  (weights as base64)
@@ -26,6 +28,17 @@ router.post('/', async (req, res) => {
         weights: weightSpecs,
       }],
     }
+
+    // Back up the current model before overwriting so it can be restored
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    await fs.copyFile(
+      path.join(MODEL_DIR, 'model.json'),
+      path.join(BACKUP_DIR, `model-${stamp}.json`)
+    ).catch(() => {}) // ok if no previous model exists yet
+    await fs.copyFile(
+      path.join(MODEL_DIR, 'weights.bin'),
+      path.join(BACKUP_DIR, `weights-${stamp}.bin`)
+    ).catch(() => {})
 
     await fs.writeFile(
       path.join(MODEL_DIR, 'model.json'),
@@ -52,15 +65,19 @@ router.post('/', async (req, res) => {
   }
 })
 
-// GET /api/model — check if model exists + return metadata
+// GET /api/model — check if model exists + return metadata + backup list
 router.get('/', async (_req, res) => {
   try {
-    const modelPath = path.join(MODEL_DIR, 'model.json')
+    const modelPath  = path.join(MODEL_DIR, 'model.json')
     const labelsPath = path.join(MODEL_DIR, 'labels.json')
     await fs.access(modelPath)
-    const labels = JSON.parse(await fs.readFile(labelsPath, 'utf-8').catch(() => 'null'))
-    const stat = await fs.stat(modelPath)
-    res.json({ exists: true, savedAt: stat.mtime.toISOString(), labels })
+    const labels  = JSON.parse(await fs.readFile(labelsPath, 'utf-8').catch(() => 'null'))
+    const stat    = await fs.stat(modelPath)
+    const backups = (await fs.readdir(BACKUP_DIR).catch(() => []))
+      .filter(f => f.startsWith('model-'))
+      .sort()
+      .reverse()
+    res.json({ exists: true, savedAt: stat.mtime.toISOString(), labels, backups })
   } catch {
     res.json({ exists: false })
   }

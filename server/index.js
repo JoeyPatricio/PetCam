@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
+import rateLimit from 'express-rate-limit'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import recordingRoutes from './routes/recordings.js'
@@ -36,6 +37,17 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }))
 
 app.use('/recordings', express.static(path.join(__dirname, 'recordings')))
+
+// Rate limit public read-only endpoints so bots can't DoS the server
+const publicLimiter = rateLimit({
+  windowMs: 60 * 1000,   // 1 minute
+  max: 120,              // 2 req/sec average — plenty for polling at 5s intervals
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests — slow down' },
+})
+app.use('/api/predictions', publicLimiter)
+app.use('/api/stream/status', publicLimiter)
 
 // Auth (public login/logout/check)
 app.use('/api/auth', authRoutes)
